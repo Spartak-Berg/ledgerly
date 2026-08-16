@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -12,10 +12,12 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Download, Filter, Plus, Receipt, UserPlus } from 'lucide-react';
+import { Download, Filter, Pencil, Plus, Receipt, Trash2, UserPlus } from 'lucide-react';
 import {
   Button,
   Card,
+  EmptyState,
+  LoadingSkeleton,
   MenuButton,
   MetricCard,
   PageHeader,
@@ -25,8 +27,10 @@ import {
   StatusBadge,
   TableWrap,
 } from '../components';
-import { cashFlow, customers, expenses, invoices } from '../data';
-import { money, shortDate } from '../lib';
+import { customerApi, type CustomerInput } from '../api';
+import { CustomerDialog } from '../CustomerDialog';
+import { cashFlow, expenses, invoices } from '../data';
+import { money, shortDate, type Customer } from '../lib';
 
 export function Dashboard() {
   const statusData = [
@@ -240,7 +244,7 @@ export function Dashboard() {
               <small>Record a business expense</small>
             </div>
           </Link>
-          <Link to="/customers">
+          <Link to="/customers?new=1">
             <span>
               <UserPlus />
             </span>
@@ -302,20 +306,72 @@ function InvoiceTable({ compact = false }: { compact?: boolean }) {
 export function Customers() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
-  const list = customers.filter(
+  const [list, setList] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState<Customer | null>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const showDialog = editing !== undefined || searchParams.get('new') === '1';
+
+  useEffect(() => {
+    let active = true;
+    customerApi
+      .list()
+      .then((result) => active && setList(result))
+      .catch((reason: unknown) =>
+        active && setError(reason instanceof Error ? reason.message : 'Could not load customers'),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filtered = list.filter(
     (x) =>
       (status === 'All' || x.status === status) &&
       `${x.company} ${x.contact} ${x.email}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+
+  const closeDialog = () => {
+    setEditing(undefined);
+    if (searchParams.has('new')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  const saveCustomer = async (input: CustomerInput) => {
+    if (editing) {
+      const updated = await customerApi.update(editing.id, input);
+      setList((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } else {
+      const created = await customerApi.create(input);
+      setList((current) => [...current, created].sort((a, b) => a.company.localeCompare(b.company)));
+    }
+    closeDialog();
+  };
+
+  const removeCustomer = async (customer: Customer) => {
+    if (!window.confirm(`Delete ${customer.company}? This cannot be undone.`)) return;
+    try {
+      await customerApi.remove(customer.id);
+      setList((current) => current.filter((item) => item.id !== customer.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not delete customer');
+    }
+  };
+
   return (
     <div className="page">
       <PageHeader
         title="Customers"
         description="Manage customer details, contacts and outstanding balances."
         action={
-          <Button>
+          <Button onClick={() => setEditing(null)}>
             <Plus size={16} /> Add customer
           </Button>
         }
@@ -356,7 +412,7 @@ export function Customers() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((x) => (
+                {filtered.map((x) => (
                   <tr key={x.id}>
                     <td>
                       <Link
@@ -379,7 +435,14 @@ export function Customers() {
                       <StatusBadge>{x.status}</StatusBadge>
                     </td>
                     <td>
-                      <MenuButton />
+                      <div className="row-actions">
+                        <Button variant="ghost" aria-label={`Edit ${x.company}`} onClick={() => setEditing(x)}>
+                          <Pencil size={15} />
+                        </Button>
+                        <Button variant="ghost" aria-label={`Delete ${x.company}`} onClick={() => void removeCustomer(x)}>
+                          <Trash2 size={15} />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -388,12 +451,8 @@ export function Customers() {
           </TableWrap>
         </div>
         <div className="mobile-cards">
-          {list.map((x) => (
-            <Link
-              to={`/customers/${x.id}`}
-              className="mobile-record"
-              key={x.id}
-            >
+          {filtered.map((x) => (
+            <div className="mobile-record" key={x.id}>
               <div>
                 <span className="mini-avatar">
                   {x.company.slice(0, 2).toUpperCase()}
@@ -414,19 +473,83 @@ export function Customers() {
                   <dd>{money(x.outstanding)}</dd>
                 </div>
               </dl>
-            </Link>
+              <div className="mobile-record-actions">
+                <Link className="button button-secondary" to={`/customers/${x.id}`}>View</Link>
+                <Button variant="secondary" onClick={() => setEditing(x)}>Edit</Button>
+                <Button variant="ghost" onClick={() => void removeCustomer(x)}>Delete</Button>
+              </div>
+            </div>
           ))}
         </div>
-        <Pagination />
+        {loading && <LoadingSkeleton />}
+        {!loading && error && <div className="api-error" role="alert">{error}</div>}
+        {!loading && !error && filtered.length === 0 && (
+          <EmptyState
+            title={list.length ? 'No matching customers' : 'No customers yet'}
+            description={list.length ? 'Try changing your search or status filter.' : 'Add your first customer to get started.'}
+          />
+        )}
       </Card>
+      {showDialog && (
+        <CustomerDialog
+          customer={editing ?? undefined}
+          onClose={closeDialog}
+          onSave={saveCustomer}
+        />
+      )}
     </div>
   );
 }
 
 export function CustomerDetail() {
   const { id } = useParams();
-  const customer = customers.find((x) => x.id === id) ?? customers[0];
+  const navigate = useNavigate();
+  const [customer, setCustomer] = useState<Customer>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState('Overview');
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    customerApi
+      .get(id)
+      .then((result) => active && setCustomer(result))
+      .catch((reason: unknown) =>
+        active && setError(reason instanceof Error ? reason.message : 'Could not load customer'),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (loading) return <div className="page"><LoadingSkeleton /></div>;
+  if (!customer) {
+    return (
+      <div className="page">
+        <Card><EmptyState title="Customer not found" description={error || 'This customer may have been deleted.'} /></Card>
+      </div>
+    );
+  }
+
+  const updateCustomer = async (input: CustomerInput) => {
+    const updated = await customerApi.update(customer.id, input);
+    setCustomer(updated);
+    setEditing(false);
+  };
+
+  const removeCustomer = async () => {
+    if (!window.confirm(`Delete ${customer.company}? This cannot be undone.`)) return;
+    try {
+      await customerApi.remove(customer.id);
+      navigate('/customers');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not delete customer');
+    }
+  };
+
   return (
     <div className="page">
       <div className="detail-head">
@@ -441,7 +564,10 @@ export function CustomerDetail() {
           </div>
         </div>
         <div className="button-row">
-          <Button variant="secondary">Edit customer</Button>
+          <Button variant="secondary" onClick={() => setEditing(true)}>Edit customer</Button>
+          <Button variant="ghost" onClick={() => void removeCustomer()}>
+            <Trash2 size={16} /> Delete
+          </Button>
           <Link
             className="button button-primary"
             to="/invoices/new"
@@ -479,24 +605,12 @@ export function CustomerDetail() {
               <div>
                 <dt>Email</dt>
                 <dd>
-                  <a href={`mailto:${customer.email}`}>{customer.email}</a>
+                  {customer.email ? <a href={`mailto:${customer.email}`}>{customer.email}</a> : 'Not provided'}
                 </dd>
               </div>
               <div>
                 <dt>Phone</dt>
-                <dd>{customer.phone}</dd>
-              </div>
-              <div>
-                <dt>Organisation no.</dt>
-                <dd>923 456 781</dd>
-              </div>
-              <div>
-                <dt>Billing address</dt>
-                <dd>
-                  Storgata 14
-                  <br />
-                  0155 Oslo, Norway
-                </dd>
+                <dd>{customer.phone || 'Not provided'}</dd>
               </div>
             </dl>
           </Card>
@@ -504,16 +618,16 @@ export function CustomerDetail() {
             <Card className="balance">
               <p>Outstanding balance</p>
               <strong>{money(customer.outstanding)}</strong>
-              <span>Across 2 open invoices</span>
+              <span>Invoice balances will appear after invoice integration</span>
             </Card>
             <Card className="mini-stats">
               <div>
                 <span>Total invoiced</span>
-                <b>{money(286400)}</b>
+                <b>—</b>
               </div>
               <div>
                 <span>Average payment time</span>
-                <b>12 days</b>
+                <b>—</b>
               </div>
             </Card>
           </div>
@@ -531,6 +645,10 @@ export function CustomerDetail() {
             </p>
           </div>
         </Card>
+      )}
+      {error && <div className="api-error" role="alert">{error}</div>}
+      {editing && (
+        <CustomerDialog customer={customer} onClose={() => setEditing(false)} onSave={updateCustomer} />
       )}
     </div>
   );

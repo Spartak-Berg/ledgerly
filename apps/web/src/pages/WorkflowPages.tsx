@@ -70,8 +70,6 @@ const invoiceSchema = z.object({
     .min(1),
 });
 type InvoiceForm = z.infer<typeof invoiceSchema>;
-// React Hook Form's watch subscription intentionally drives the live invoice preview.
-// eslint-disable-next-line react-hooks/incompatible-library, @typescript-eslint/no-unused-vars
 export function CreateInvoice() {
   const navigate = useNavigate();
   const {
@@ -109,10 +107,12 @@ export function CreateInvoice() {
     },
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+  // React Hook Form's watch subscription intentionally drives the live preview.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const values = watch();
   const totals = invoiceTotals(values.items as LineItem[]);
   const customer = customers.find((c) => c.id === values.customer);
-  const save = (action: string) => (_data: InvoiceForm) => {
+  const save = (action: string) => () => {
     window.alert(`Invoice ${action} (mock workflow)`);
     navigate('/invoices');
   };
