@@ -15,12 +15,12 @@ describe('company permission matrix', () => {
     expect(
       hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_CUSTOMERS),
     ).toBe(false);
-    expect(
-      hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_INVOICES),
-    ).toBe(true);
-    expect(
-      hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_PAYMENTS),
-    ).toBe(true);
+    expect(hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_INVOICES)).toBe(
+      true,
+    );
+    expect(hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_PAYMENTS)).toBe(
+      true,
+    );
   });
 
   it('does not grant employees customer or company management', () => {

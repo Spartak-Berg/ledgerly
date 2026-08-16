@@ -10,6 +10,10 @@ export const CompanyPermission = {
   VIEW_INVOICES: 'VIEW_INVOICES',
   MANAGE_PAYMENTS: 'MANAGE_PAYMENTS',
   VIEW_PAYMENTS: 'VIEW_PAYMENTS',
+  MANAGE_EXPENSES: 'MANAGE_EXPENSES',
+  VIEW_EXPENSES: 'VIEW_EXPENSES',
+  MANAGE_SUPPLIERS: 'MANAGE_SUPPLIERS',
+  VIEW_SUPPLIERS: 'VIEW_SUPPLIERS',
 } as const;
 
 export type CompanyPermission =
@@ -25,6 +29,10 @@ const matrix: Record<CompanyRole, ReadonlySet<CompanyPermission>> = {
     CompanyPermission.VIEW_INVOICES,
     CompanyPermission.MANAGE_PAYMENTS,
     CompanyPermission.VIEW_PAYMENTS,
+    CompanyPermission.MANAGE_EXPENSES,
+    CompanyPermission.VIEW_EXPENSES,
+    CompanyPermission.MANAGE_SUPPLIERS,
+    CompanyPermission.VIEW_SUPPLIERS,
   ]),
   EMPLOYEE: new Set(),
 };

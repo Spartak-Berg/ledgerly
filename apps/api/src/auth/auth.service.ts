@@ -11,6 +11,7 @@ import { RegisterDto } from './dto/register.dto';
 import { PasswordService } from './password.service';
 import { SessionService, type SessionTokens } from './session.service';
 import type { RequestMetadata } from './auth.types';
+import { DEFAULT_EXPENSE_CATEGORIES } from '../expenses/default-categories';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const clean = (value: string) => value.trim().replace(/\s+/g, ' ');
@@ -50,6 +51,12 @@ export class AuthService {
             slug,
             settings: { create: {} },
           },
+        });
+        await transaction.expenseCategory.createMany({
+          data: DEFAULT_EXPENSE_CATEGORIES.map((category) => ({
+            ...category,
+            companyId: company.id,
+          })),
         });
         await transaction.companyMember.create({
           data: {

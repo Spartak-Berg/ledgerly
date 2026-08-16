@@ -16,7 +16,6 @@ const Dashboard = corePage('Dashboard')
 const Customers = corePage('Customers')
 const CustomerDetail = corePage('CustomerDetail')
 const Invoices = corePage('Invoices')
-const Expenses = corePage('Expenses')
 const CreateInvoice = workflowPage('CreateInvoice')
 const UploadReceipt = workflowPage('UploadReceipt')
 const Reports = workflowPage('Reports')
@@ -24,6 +23,8 @@ const SettingsPage = workflowPage('SettingsPage')
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })))
 const ProductsPage = lazy(() => import('./pages/ProductsPage').then(module => ({ default: module.ProductsPage })))
 const InvoiceDetailPage = lazy(() => import('./pages/InvoiceDetailPage').then(module => ({ default: module.InvoiceDetailPage })))
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage').then(module => ({ default: module.ExpensesPage })))
+const SuppliersPage = lazy(() => import('./pages/SuppliersPage').then(module => ({ default: module.SuppliersPage })))
 
 function ProtectedRoutes() {
   const { loading, profile } = useAuth()
@@ -39,7 +40,8 @@ function ProtectedRoutes() {
     <Route path="/invoices/new" element={<CreateInvoice />} />
     <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
     <Route path="/invoices/:id/edit" element={<CreateInvoice />} />
-    <Route path="/expenses" element={<Expenses />} />
+    <Route path="/expenses" element={<ExpensesPage />} />
+    <Route path="/suppliers" element={<SuppliersPage />} />
     <Route path="/expenses/upload" element={<UploadReceipt />} />
     <Route path="/reports" element={<Reports />} />
     <Route path="/settings" element={<SettingsPage />} />

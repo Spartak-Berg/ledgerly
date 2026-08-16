@@ -17,6 +17,8 @@ model User {
   sessions          Session[]
   recordedPayments  Payment[]       @relation("PaymentRecordedBy")
   reversedPayments  Payment[]       @relation("PaymentReversedBy")
+  createdExpenses   Expense[]       @relation("ExpenseCreatedBy")
+  reviewedExpenses  Expense[]       @relation("ExpenseReviewedBy")
   selectedCompany   Company?        @relation("SelectedCompany", fields: [selectedCompanyId], references: [id], onDelete: SetNull)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -25,10 +27,10 @@ model User {
 }
 
 model Company {
-  id                 String           @id @default(uuid()) @db.Uuid
+  id                 String            @id @default(uuid()) @db.Uuid
   name               String
-  slug               String           @unique
-  defaultCurrency    String           @default("NOK") @db.VarChar(3)
+  slug               String            @unique
+  defaultCurrency    String            @default("NOK") @db.VarChar(3)
   organisationNumber String?
   email              String?
   phone              String?
@@ -37,21 +39,24 @@ model Company {
   addressLine2       String?
   postalCode         String?
   city               String?
-  countryCode        String           @default("NO") @db.VarChar(2)
-  vatRegistered      Boolean          @default(false)
+  countryCode        String            @default("NO") @db.VarChar(2)
+  vatRegistered      Boolean           @default(false)
   vatNumber          String?
   bankAccount        String?
   iban               String?
   bic                String?
   memberships        CompanyMember[]
   settings           CompanySettings?
-  selectedBy         User[]           @relation("SelectedCompany")
+  selectedBy         User[]            @relation("SelectedCompany")
   customers          Customer[]
   products           Product[]
   invoices           Invoice[]
   payments           Payment[]
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  suppliers          Supplier[]
+  expenseCategories  ExpenseCategory[]
+  expenses           Expense[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   @@index([name])
   @@map("companies")
@@ -249,6 +254,81 @@ model Payment {
   @@map("payments")
 }
 
+model Supplier {
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @db.Uuid
+  name               String
+  organisationNumber String?
+  email              String?
+  phone              String?
+  addressLine1       String?
+  postalCode         String?
+  city               String?
+  countryCode        String    @default("NO") @db.VarChar(2)
+  notes              String?
+  active             Boolean   @default(true)
+  archivedAt         DateTime?
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  expenses           Expense[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([companyId, active, name])
+  @@map("suppliers")
+}
+
+model ExpenseCategory {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @db.Uuid
+  name      String
+  systemKey String?
+  vatRate   Decimal   @default(25) @db.Decimal(5, 2)
+  active    Boolean   @default(true)
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  expenses  Expense[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([companyId, name])
+  @@unique([companyId, systemKey])
+  @@index([companyId, active, name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id               String          @id @default(uuid()) @db.Uuid
+  companyId        String          @db.Uuid
+  supplierId       String?         @db.Uuid
+  categoryId       String          @db.Uuid
+  merchantSnapshot String
+  description      String?
+  expenseDate      DateTime        @db.Date
+  currency         String          @default("NOK") @db.VarChar(3)
+  netMinor         Int
+  vatMinor         Int
+  totalMinor       Int
+  paymentMethod    PaymentMethod
+  status           ExpenseStatus   @default(DRAFT)
+  notes            String?
+  archivedAt       DateTime?
+  reviewedAt       DateTime?
+  createdById      String          @db.Uuid
+  reviewedById     String?         @db.Uuid
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  category         ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy        User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy       User?           @relation("ExpenseReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([companyId, expenseDate])
+  @@index([companyId, status, archivedAt])
+  @@index([supplierId])
+  @@index([categoryId])
+  @@map("expenses")
+}
+
 enum CustomerStatus {
   ACTIVE
   LEAD
@@ -280,6 +360,12 @@ enum PaymentMethod {
   CARD
   CASH
   OTHER
+}
+
+enum ExpenseStatus {
+  DRAFT
+  APPROVED
+  REJECTED
 }
 
 enum CompanyRole {

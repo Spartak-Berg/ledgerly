@@ -41,6 +41,12 @@ interface PaymentResultResponse {
     status: string;
   };
 }
+interface ExpenseResponse {
+  id: string;
+  status: string;
+  totalMinor: number;
+  merchantSnapshot: string;
+}
 
 const csrfFrom = (response: request.Response): string => {
   const values = response.headers['set-cookie'] as unknown as
@@ -62,6 +68,9 @@ describe('Ledgerly API (e2e)', () => {
   let invoiceCustomerId: string | undefined;
   const createdProductIds: string[] = [];
   const createdInvoiceIds: string[] = [];
+  const createdExpenseIds: string[] = [];
+  const createdSupplierIds: string[] = [];
+  const createdCategoryIds: string[] = [];
   let createdUserId: string | undefined;
   let primaryCompanyId = '';
   let accountantCompanyId = '';
@@ -592,6 +601,145 @@ describe('Ledgerly API (e2e)', () => {
       .expect({ archived: true });
   });
 
+  it('manages tenant-scoped suppliers, categories and exact manual expenses', async () => {
+    const categories = await agent
+      .get('/api/v1/expense-categories')
+      .set('x-company-id', primaryCompanyId)
+      .expect(200);
+    expect(categories.body).toHaveLength(5);
+    const customCategory = await agent
+      .post('/api/v1/expense-categories')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ name: 'E2E equipment', vatRate: 25 })
+      .expect(201);
+    const categoryId = (customCategory.body as { id: string }).id;
+    createdCategoryIds.push(categoryId);
+    await agent
+      .post('/api/v1/expense-categories')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ name: 'E2E equipment', vatRate: 25 })
+      .expect(409);
+
+    const supplier = await agent
+      .post('/api/v1/suppliers')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        name: 'Ledgerly Test Supplier',
+        organisationNumber: '999888777',
+        countryCode: 'NO',
+      })
+      .expect(201);
+    const supplierId = (supplier.body as { id: string }).id;
+    createdSupplierIds.push(supplierId);
+    await agent
+      .get('/api/v1/suppliers')
+      .set('x-company-id', accountantCompanyId)
+      .expect(200)
+      .expect([]);
+    const input = {
+      supplierId,
+      categoryId,
+      merchant: 'Ledgerly Test Supplier',
+      description: 'Test equipment',
+      expenseDate: '2026-08-16',
+      currency: 'NOK',
+      netMinor: 8000,
+      vatMinor: 2000,
+      totalMinor: 10000,
+      paymentMethod: 'CARD',
+    };
+    await agent
+      .post('/api/v1/expenses')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ ...input, totalMinor: 9999 })
+      .expect(400);
+    const expense = await agent
+      .post('/api/v1/expenses')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send(input)
+      .expect(201);
+    const expenseBody = expense.body as unknown as ExpenseResponse;
+    createdExpenseIds.push(expenseBody.id);
+    expect(expenseBody).toMatchObject({
+      merchantSnapshot: 'Ledgerly Test Supplier',
+      status: 'DRAFT',
+      totalMinor: 10000,
+    });
+    await agent
+      .get(`/api/v1/expenses/${expenseBody.id}`)
+      .set('x-company-id', accountantCompanyId)
+      .expect(404);
+    await agent
+      .get(`/api/v1/expenses?search=equipment&categoryId=${categoryId}`)
+      .set('x-company-id', primaryCompanyId)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as unknown as {
+          total: number;
+          page: number;
+          summary: {
+            totalMinor: number;
+            vatMinor: number;
+            awaitingReview: number;
+          };
+        };
+        expect(body).toMatchObject({ total: 1, page: 1 });
+        expect(body.summary).toMatchObject({
+          totalMinor: 10000,
+          vatMinor: 2000,
+          awaitingReview: 1,
+        });
+      });
+    await agent
+      .post(`/api/v1/expenses/${expenseBody.id}/review`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ status: 'APPROVED' })
+      .expect(201)
+      .expect((response) =>
+        expect((response.body as unknown as ExpenseResponse).status).toBe(
+          'APPROVED',
+        ),
+      );
+    await agent
+      .patch(`/api/v1/expenses/${expenseBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send(input)
+      .expect(409);
+    await agent
+      .delete(`/api/v1/expense-categories/${categoryId}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(200);
+    await agent
+      .delete(`/api/v1/suppliers/${supplierId}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(200);
+    await agent
+      .post('/api/v1/expenses')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send(input)
+      .expect(400);
+    await agent
+      .get(`/api/v1/expenses/${expenseBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .expect(200);
+    await agent
+      .delete(`/api/v1/expenses/${expenseBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(200)
+      .expect({ archived: true });
+  });
+
   it('rotates refresh credentials and revokes the session on logout', async () => {
     const refreshed = await agent
       .post('/api/v1/auth/refresh')
@@ -619,6 +767,18 @@ describe('Ledgerly API (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (createdExpenseIds.length)
+      await prisma.expense.deleteMany({
+        where: { id: { in: createdExpenseIds } },
+      });
+    if (createdSupplierIds.length)
+      await prisma.supplier.deleteMany({
+        where: { id: { in: createdSupplierIds } },
+      });
+    if (createdCategoryIds.length)
+      await prisma.expenseCategory.deleteMany({
+        where: { id: { in: createdCategoryIds } },
+      });
     if (createdInvoiceIds.length)
       await prisma.payment.deleteMany({
         where: { invoiceId: { in: createdInvoiceIds } },
@@ -646,6 +806,9 @@ describe('Ledgerly API (e2e)', () => {
       outsiderCompanyId,
     ].filter(Boolean);
     if (companyIds.length) {
+      await prisma.expenseCategory.deleteMany({
+        where: { companyId: { in: companyIds } },
+      });
       await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
     }
     await app.close();

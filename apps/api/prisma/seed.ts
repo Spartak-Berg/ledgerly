@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { PasswordService } from '../src/auth/password.service';
+import { DEFAULT_EXPENSE_CATEGORIES } from '../src/expenses/default-categories';
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error('DATABASE_URL is not configured');
@@ -11,12 +12,24 @@ const prisma = new PrismaClient({
 });
 
 const fictionalCustomers = [
-  { companyName: 'Nordlys Studio Demo AS', contactName: 'Ida Solberg', email: 'ida@example.test', phone: '+47 400 00 001' },
-  { companyName: 'Fjord & Form Demo AS', contactName: 'Emil Strand', email: 'emil@example.test', phone: '+47 400 00 002' },
+  {
+    companyName: 'Nordlys Studio Demo AS',
+    contactName: 'Ida Solberg',
+    email: 'ida@example.test',
+    phone: '+47 400 00 001',
+  },
+  {
+    companyName: 'Fjord & Form Demo AS',
+    contactName: 'Emil Strand',
+    email: 'emil@example.test',
+    phone: '+47 400 00 002',
+  },
 ];
 
 async function seed() {
-  const passwordHash = await new PasswordService().hash('ledgerly-demo-password');
+  const passwordHash = await new PasswordService().hash(
+    'ledgerly-demo-password',
+  );
   const user = await prisma.user.upsert({
     where: { email: 'demo@ledgerly.local' },
     update: {},
@@ -44,6 +57,18 @@ async function seed() {
     where: { id: user.id },
     data: { selectedCompanyId: company.id },
   });
+  for (const category of DEFAULT_EXPENSE_CATEGORIES) {
+    await prisma.expenseCategory.upsert({
+      where: {
+        companyId_systemKey: {
+          companyId: company.id,
+          systemKey: category.systemKey,
+        },
+      },
+      update: {},
+      create: { ...category, companyId: company.id },
+    });
+  }
 
   for (const customer of fictionalCustomers) {
     const exists = await prisma.customer.findFirst({

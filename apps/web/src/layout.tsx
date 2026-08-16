@@ -18,6 +18,7 @@ import {
   LogOut,
   Check,
   PackageOpen,
+  Truck,
 } from 'lucide-react';
 import { Button } from './components';
 import { useAuth } from './useAuth';
@@ -29,6 +30,7 @@ const nav = [
   ['Products & Services', '/products', PackageOpen],
   ['Invoices', '/invoices', FileText],
   ['Expenses', '/expenses', Receipt],
+  ['Suppliers', '/suppliers', Truck],
   ['Reports', '/reports', ChartNoAxesCombined],
   ['Settings', '/settings', Settings],
 ] as const;
