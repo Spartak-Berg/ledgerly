@@ -369,7 +369,7 @@ export function Customers() {
     <div className="page">
       <PageHeader
         title="Customers"
-        description="Manage customer details, contacts and outstanding balances."
+        description="Manage customer details and billing contacts."
         action={
           <Button onClick={() => setEditing(null)}>
             <Plus size={16} /> Add customer
@@ -393,9 +393,6 @@ export function Customers() {
               <option>Lead</option>
               <option>Archived</option>
             </Select>
-            <Button variant="secondary">
-              <Filter size={16} /> Filters
-            </Button>
           </div>
         </div>
         <div className="desktop-table">
@@ -406,7 +403,6 @@ export function Customers() {
                   <th>Company</th>
                   <th>Contact</th>
                   <th>Contact details</th>
-                  <th className="number">Outstanding</th>
                   <th>Status</th>
                   <th />
                 </tr>
@@ -430,7 +426,6 @@ export function Customers() {
                         <small>{x.phone}</small>
                       </div>
                     </td>
-                    <td className="number strong">{money(x.outstanding)}</td>
                     <td>
                       <StatusBadge>{x.status}</StatusBadge>
                     </td>
@@ -469,8 +464,8 @@ export function Customers() {
                   <dd>{x.email}</dd>
                 </div>
                 <div>
-                  <dt>Outstanding</dt>
-                  <dd>{money(x.outstanding)}</dd>
+                  <dt>Phone</dt>
+                  <dd>{x.phone || 'Not provided'}</dd>
                 </div>
               </dl>
               <div className="mobile-record-actions">
@@ -570,7 +565,7 @@ export function CustomerDetail() {
           </Button>
           <Link
             className="button button-primary"
-            to="/invoices/new"
+            to={`/invoices/new?customer=${customer.id}`}
           >
             <Plus size={16} /> Create invoice
           </Link>
@@ -600,7 +595,7 @@ export function CustomerDetail() {
             <dl className="details">
               <div>
                 <dt>Contact person</dt>
-                <dd>{customer.contact}</dd>
+                <dd>{customer.contact || 'Not provided'}</dd>
               </div>
               <div>
                 <dt>Email</dt>
@@ -634,7 +629,10 @@ export function CustomerDetail() {
         </div>
       ) : tab === 'Invoices' ? (
         <Card>
-          <InvoiceTable />
+          <EmptyState
+            title="No connected invoices yet"
+            description="Customer-specific invoices will appear here after invoice persistence is connected."
+          />
         </Card>
       ) : (
         <Card>

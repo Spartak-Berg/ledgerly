@@ -75,6 +75,19 @@ describe('AppController (e2e)', () => {
       });
 
     await request(app.getHttpServer())
+      .patch(`/customers/${createdCustomerId}`)
+      .send({ contactName: null, email: null })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as unknown as CustomerResponse & {
+          contactName: string | null;
+          email: string | null;
+        };
+        expect(body.contactName).toBeNull();
+        expect(body.email).toBeNull();
+      });
+
+    await request(app.getHttpServer())
       .delete(`/customers/${createdCustomerId}`)
       .expect(204);
     createdCustomerId = undefined;

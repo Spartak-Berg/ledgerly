@@ -36,9 +36,9 @@ const toCustomer = (customer: ApiCustomer): Customer => ({
 const cleanInput = (input: CustomerInput) => ({
   companyName: input.companyName.trim(),
   status: input.status,
-  ...(input.contactName?.trim() && { contactName: input.contactName.trim() }),
-  ...(input.email?.trim() && { email: input.email.trim() }),
-  ...(input.phone?.trim() && { phone: input.phone.trim() }),
+  contactName: input.contactName?.trim() || null,
+  email: input.email?.trim() || null,
+  phone: input.phone?.trim() || null,
 });
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

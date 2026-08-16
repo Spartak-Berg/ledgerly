@@ -17,17 +17,17 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  contactName?: string;
+  contactName?: string | null;
 
   @IsOptional()
   @IsEmail()
   @MaxLength(320)
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  phone?: string;
+  phone?: string | null;
 
   @IsOptional()
   @IsEnum(CustomerStatus)

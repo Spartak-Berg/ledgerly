@@ -1,5 +1,5 @@
-import { useRef, useState, type DragEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -46,8 +46,10 @@ import {
   StatusBadge,
   Textarea,
 } from '../components';
-import { cashFlow, customers } from '../data';
-import { invoiceTotals, money, type LineItem } from '../lib';
+import { customerApi } from '../api';
+import { cashFlow } from '../data';
+import { downloadInvoicePdf } from '../invoicePdf';
+import { invoiceTotals, money, type Customer, type LineItem } from '../lib';
 
 const invoiceSchema = z.object({
   customer: z.string().min(1, 'Select a customer'),
@@ -72,16 +74,21 @@ const invoiceSchema = z.object({
 type InvoiceForm = z.infer<typeof invoiceSchema>;
 export function CreateInvoice() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [customerList, setCustomerList] = useState<Customer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [customersError, setCustomersError] = useState('');
   const {
     register,
     control,
     watch,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<InvoiceForm>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
-      customer: '1',
+      customer: searchParams.get('customer') ?? '',
       number: 'INV-2026-0143',
       issueDate: '2026-07-21',
       dueDate: '2026-08-20',
@@ -106,12 +113,36 @@ export function CreateInvoice() {
       ],
     },
   });
+  useEffect(() => {
+    let active = true;
+    customerApi
+      .list()
+      .then((result) => active && setCustomerList(result))
+      .catch((reason: unknown) =>
+        active &&
+        setCustomersError(
+          reason instanceof Error ? reason.message : 'Could not load customers',
+        ),
+      )
+      .finally(() => active && setCustomersLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
   // React Hook Form's watch subscription intentionally drives the live preview.
   // eslint-disable-next-line react-hooks/incompatible-library
   const values = watch();
   const totals = invoiceTotals(values.items as LineItem[]);
-  const customer = customers.find((c) => c.id === values.customer);
+  const customer = customerList.find((c) => c.id === values.customer);
+  const downloadPdf = async (data: InvoiceForm) => {
+    const selectedCustomer = customerList.find((item) => item.id === data.customer);
+    if (!selectedCustomer) {
+      setError('customer', { message: 'Select an available customer' });
+      return;
+    }
+    await downloadInvoicePdf({ ...data, customer: selectedCustomer });
+  };
   const save = (action: string) => () => {
     window.alert(`Invoice ${action} (mock workflow)`);
     navigate('/invoices');
@@ -135,9 +166,11 @@ export function CreateInvoice() {
               <h3>Invoice details</h3>
               <div className="form-grid">
                 <Field label="Customer">
-                  <Select {...register('customer')}>
-                    <option value="">Select customer</option>
-                    {customers.map((x) => (
+                  <Select {...register('customer')} disabled={customersLoading}>
+                    <option value="">
+                      {customersLoading ? 'Loading customers…' : 'Select customer'}
+                    </option>
+                    {customerList.map((x) => (
                       <option
                         key={x.id}
                         value={x.id}
@@ -148,6 +181,12 @@ export function CreateInvoice() {
                   </Select>
                   {errors.customer && (
                     <small className="error">{errors.customer.message}</small>
+                  )}
+                  {customersError && <small className="error">{customersError}</small>}
+                  {!customersLoading && !customersError && customerList.length === 0 && (
+                    <small>
+                      No customers yet. <Link to="/customers?new=1">Add a customer</Link>
+                    </small>
                   )}
                 </Field>
                 <Field label="Invoice number">
@@ -203,16 +242,16 @@ export function CreateInvoice() {
                       aria-label="Quantity"
                       type="number"
                       step="0.01"
-                      {...register(`items.${index}.quantity`)}
+                      {...register(`items.${index}.quantity`, { valueAsNumber: true })}
                     />
                     <Input
                       aria-label="Unit price"
                       type="number"
-                      {...register(`items.${index}.unitPrice`)}
+                      {...register(`items.${index}.unitPrice`, { valueAsNumber: true })}
                     />
                     <Select
                       aria-label="VAT rate"
-                      {...register(`items.${index}.vatRate`)}
+                      {...register(`items.${index}.vatRate`, { valueAsNumber: true })}
                     >
                       <option value="25">25%</option>
                       <option value="15">15%</option>
@@ -291,6 +330,8 @@ export function CreateInvoice() {
               <Button
                 type="button"
                 variant="ghost"
+                onClick={handleSubmit(downloadPdf)}
+                disabled={customersLoading || customerList.length === 0}
               >
                 <Download size={16} /> PDF
               </Button>
@@ -298,6 +339,9 @@ export function CreateInvoice() {
             <InvoicePreview
               customer={customer?.company}
               number={values.number}
+              issueDate={values.issueDate}
+              dueDate={values.dueDate}
+              currency={values.currency}
               items={values.items as LineItem[]}
               totals={totals}
             />
@@ -332,11 +376,17 @@ export function CreateInvoice() {
 function InvoicePreview({
   customer,
   number,
+  issueDate,
+  dueDate,
+  currency,
   items,
   totals,
 }: {
   customer?: string;
   number: string;
+  issueDate: string;
+  dueDate: string;
+  currency: string;
   items: LineItem[];
   totals: ReturnType<typeof invoiceTotals>;
 }) {
@@ -351,6 +401,11 @@ function InvoicePreview({
           <h2>INVOICE</h2>
           <b>{number}</b>
         </div>
+      </div>
+      <div className="paper-dates">
+        <span><small>ISSUED</small>{issueDate}</span>
+        <span><small>DUE</small>{dueDate}</span>
+        <span><small>CURRENCY</small>{currency}</span>
       </div>
       <div className="paper-address">
         <div>
@@ -550,6 +605,23 @@ export function UploadReceipt() {
 }
 
 export function Reports() {
+  const [reportCustomers, setReportCustomers] = useState<Customer[]>([]);
+  const [reportCustomersError, setReportCustomersError] = useState('');
+  useEffect(() => {
+    let active = true;
+    customerApi
+      .list()
+      .then((result) => active && setReportCustomers(result))
+      .catch((reason: unknown) =>
+        active &&
+        setReportCustomersError(
+          reason instanceof Error ? reason.message : 'Could not load customers',
+        ),
+      );
+    return () => {
+      active = false;
+    };
+  }, []);
   const categories = [
     { name: 'Software', value: 32, color: '#3b73ed' },
     { name: 'Travel', value: 24, color: '#7157d9' },
@@ -719,19 +791,21 @@ export function Reports() {
         <Card className="top-customers">
           <div className="card-head">
             <div>
-              <h3>Top customers</h3>
-              <p>By total revenue</p>
+              <h3>Customers</h3>
+              <p>Live customer directory</p>
             </div>
           </div>
-          {customers.slice(0, 5).map((x, i) => (
+          {reportCustomers.slice(0, 5).map((x, i) => (
             <div key={x.id}>
               <span>{i + 1}</span>
-              <b>{x.company}</b>
-              <strong>
-                {money([386400, 294500, 241900, 196300, 148750][i])}
-              </strong>
+              <Link to={`/customers/${x.id}`}><b>{x.company}</b></Link>
+              <StatusBadge>{x.status}</StatusBadge>
             </div>
           ))}
+          {!reportCustomersError && reportCustomers.length === 0 && (
+            <div><span>—</span><b>No customers yet</b><Link to="/customers?new=1">Add one</Link></div>
+          )}
+          {reportCustomersError && <p className="api-error">{reportCustomersError}</p>}
         </Card>
       </div>
     </div>

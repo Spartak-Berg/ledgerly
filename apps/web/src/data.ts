@@ -1,13 +1,4 @@
-import type { Customer, Expense, Invoice } from './lib'
-
-export const customers: Customer[] = [
-  { id: '1', company: 'Nordlys Studio AS', contact: 'Ida Solberg', email: 'ida@nordlysstudio.no', phone: '+47 924 18 742', outstanding: 48250, status: 'Active' },
-  { id: '2', company: 'Fjord & Form AS', contact: 'Marius Dahl', email: 'marius@fjordform.no', phone: '+47 480 32 991', outstanding: 0, status: 'Active' },
-  { id: '3', company: 'Bergen Bryggeri', contact: 'Sofie Nilsen', email: 'sofie@bergenbryggeri.no', phone: '+47 913 06 511', outstanding: 18750, status: 'Active' },
-  { id: '4', company: 'Varde Consulting', contact: 'Emil Haugen', email: 'emil@varde.no', phone: '+47 406 77 120', outstanding: 0, status: 'Lead' },
-  { id: '5', company: 'Arktisk Arkitektur', contact: 'Thea Berg', email: 'thea@arktisk.no', phone: '+47 980 22 684', outstanding: 95400, status: 'Active' },
-  { id: '6', company: 'Løkka Kaffe AS', contact: 'Henrik Moen', email: 'henrik@lokkakaffe.no', phone: '+47 465 81 302', outstanding: 7900, status: 'Archived' },
-]
+import type { Expense, Invoice } from './lib'
 
 export const invoices: Invoice[] = [
   { id: '1', number: 'INV-2026-0142', customer: 'Nordlys Studio AS', issueDate: '2026-07-14', dueDate: '2026-08-13', status: 'Sent', amount: 48250 },
