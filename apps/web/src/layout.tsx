@@ -15,8 +15,10 @@ import {
   Plus,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
 } from 'lucide-react';
 import { Button } from './components';
+import { useAuth } from './useAuth';
 
 const nav = [
   ['Dashboard', '/', LayoutDashboard],
@@ -39,6 +41,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobile, setMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { logout, profile } = useAuth();
+  if (!profile) return null;
+  const companyInitials = profile.company.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+  const userInitials = profile.user.fullName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+  const role = `${profile.company.role[0]}${profile.company.role.slice(1).toLowerCase()}`;
   const title =
     nav.find(([, path]) =>
       path === '/'
@@ -67,12 +84,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
         <div className="company">
-          <span className="company-mark">NS</span>
+          <span className="company-mark">{companyInitials}</span>
           {!collapsed && (
             <>
               <span>
-                <b>Nordic Studio</b>
-                <small>Business account</small>
+                <b>{profile.company.name}</b>
+                <small>{profile.company.defaultCurrency} workspace</small>
               </span>
               <ChevronsUpDown size={14} />
             </>
@@ -139,11 +156,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Bell size={19} />
               <i className="notify" />
             </Button>
-            <div className="avatar">SB</div>
+            <div className="avatar">{userInitials}</div>
             <span className="user-name">
-              <b>Spartak Berg</b>
-              <small>Administrator</small>
+              <b>{profile.user.fullName}</b>
+              <small>{role}</small>
             </span>
+            <Button variant="ghost" aria-label="Sign out" title="Sign out" onClick={() => void logout()}>
+              <LogOut size={17} />
+            </Button>
           </div>
         </header>
         <main>{children}</main>

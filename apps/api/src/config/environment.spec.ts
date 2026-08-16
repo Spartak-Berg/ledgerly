@@ -15,10 +15,21 @@ describe('readEnvironment', () => {
 
   it('applies safe local defaults', () => {
     expect(readEnvironment()).toEqual({
+      accessTokenSecret:
+        'ledgerly-development-only-secret-change-before-production',
       databaseUrl: 'postgresql://localhost/test',
+      isProduction: false,
       port: 3000,
       webOrigin: 'http://localhost:5173',
     });
+  });
+
+  it('requires a strong secret in production', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.ACCESS_TOKEN_SECRET;
+    expect(() => readEnvironment()).toThrow(
+      'ACCESS_TOKEN_SECRET must contain at least 32 characters',
+    );
   });
 
   it('rejects a missing database URL', () => {

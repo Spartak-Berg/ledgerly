@@ -1,6 +1,7 @@
 import type { Customer, CustomerStatus } from './lib';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+const CSRF_COOKIE = 'ledgerly_csrf';
 
 type ApiCustomerStatus = 'ACTIVE' | 'LEAD' | 'ARCHIVED';
 
@@ -41,11 +42,29 @@ const cleanInput = (input: CustomerInput) => ({
   phone: input.phone?.trim() || null,
 });
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const csrfToken = () =>
+  document.cookie
+    .split('; ')
+    .find((value) => value.startsWith(`${CSRF_COOKIE}=`))
+    ?.slice(CSRF_COOKIE.length + 1);
+
+async function rawRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = csrfToken();
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'x-csrf-token': token } : {}),
       ...init?.headers,
     },
   });
@@ -57,11 +76,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const message = Array.isArray(body?.message)
       ? body.message.join(', ')
       : body?.message;
-    throw new Error(message ?? `Request failed with status ${response.status}`);
+    throw new ApiError(message ?? `Request failed with status ${response.status}`, response.status);
   }
 
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+let refreshRequest: Promise<unknown> | undefined;
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    return await rawRequest<T>(path, init);
+  } catch (error) {
+    const cannotRefresh = ['/auth/login', '/auth/refresh', '/auth/register'].includes(path);
+    if (
+      !(error instanceof ApiError) ||
+      error.status !== 401 ||
+      cannotRefresh ||
+      !csrfToken()
+    ) {
+      throw error;
+    }
+
+    refreshRequest ??= rawRequest('/auth/refresh', { method: 'POST' }).finally(() => {
+      refreshRequest = undefined;
+    });
+    await refreshRequest;
+    return rawRequest<T>(path, init);
+  }
 }
 
 export const customerApi = {

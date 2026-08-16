@@ -64,6 +64,8 @@ API variables are documented in `apps/api/.env.example`:
 - `DATABASE_URL`: local PostgreSQL connection string
 - `PORT`: API port
 - `WEB_ORIGIN`: exact browser origin allowed by CORS
+- `ACCESS_TOKEN_SECRET`: signing secret; generate a unique value of at least 32 random characters for production
+- `NODE_ENV`: use `production` only in a properly secured deployment environment
 
 The frontend reads `VITE_API_URL` from `apps/web/.env.example`. Vite variables are public browser configuration and must never contain secrets.
 

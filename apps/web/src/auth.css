@@ -1,0 +1,8 @@
+.text-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+}

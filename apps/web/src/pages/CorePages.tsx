@@ -31,8 +31,11 @@ import { customerApi, type CustomerInput } from '../api';
 import { CustomerDialog } from '../CustomerDialog';
 import { cashFlow, expenses, invoices } from '../data';
 import { money, shortDate, type Customer } from '../lib';
+import { useAuth } from '../useAuth';
 
 export function Dashboard() {
+  const { profile } = useAuth();
+  const firstName = profile?.user.fullName.split(/\s+/)[0] ?? 'there';
   const statusData = [
     { name: 'Paid', value: 61, color: '#16a36a' },
     { name: 'Sent', value: 25, color: '#3b73ed' },
@@ -42,8 +45,8 @@ export function Dashboard() {
   return (
     <div className="page">
       <PageHeader
-        title="Good morning, Spartak"
-        description="Here’s what’s happening with Nordic Studio this month."
+        title={`Good morning, ${firstName}`}
+        description={`Here’s what’s happening with ${profile?.company.name ?? 'your company'} this month.`}
         action={
           <div className="button-row">
             <Button variant="secondary">
