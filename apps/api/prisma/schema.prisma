@@ -46,6 +46,7 @@ model Company {
   selectedBy         User[]           @relation("SelectedCompany")
   customers          Customer[]
   products           Product[]
+  invoices           Invoice[]
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -54,23 +55,24 @@ model Company {
 }
 
 model Product {
-  id              String      @id @default(uuid()) @db.Uuid
-  companyId       String      @db.Uuid
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @db.Uuid
   name            String
   description     String?
   sku             String?
-  type            ProductType @default(SERVICE)
-  unit            String      @default("hour")
-  defaultQuantity Decimal     @default(1) @db.Decimal(12, 4)
+  type            ProductType   @default(SERVICE)
+  unit            String        @default("hour")
+  defaultQuantity Decimal       @default(1) @db.Decimal(12, 4)
   unitPriceMinor  Int
-  vatRate         Decimal     @default(25) @db.Decimal(5, 2)
-  currency        String      @default("NOK") @db.VarChar(3)
+  vatRate         Decimal       @default(25) @db.Decimal(5, 2)
+  currency        String        @default("NOK") @db.VarChar(3)
   category        String?
-  active          Boolean     @default(true)
+  active          Boolean       @default(true)
   archivedAt      DateTime?
-  company         Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  invoiceItems    InvoiceItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@unique([companyId, sku])
   @@index([companyId, active, name])
@@ -148,10 +150,68 @@ model Customer {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   company             Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  invoices            Invoice[]
 
   @@index([companyId, companyName])
   @@index([companyName])
   @@map("customers")
+}
+
+model Invoice {
+  id                     String        @id @default(uuid()) @db.Uuid
+  companyId              String        @db.Uuid
+  customerId             String        @db.Uuid
+  status                 InvoiceStatus @default(DRAFT)
+  number                 String?
+  issueDate              DateTime      @db.Date
+  dueDate                DateTime      @db.Date
+  currency               String        @default("NOK") @db.VarChar(3)
+  reference              String?
+  purchaseOrderReference String?
+  notes                  String?
+  paymentTerms           String?
+  customerNameSnapshot   String
+  companyNameSnapshot    String
+  customerSnapshot       Json          @default("{}")
+  companySnapshot        Json          @default("{}")
+  subtotalMinor          Int           @default(0)
+  vatMinor               Int           @default(0)
+  totalMinor             Int           @default(0)
+  version                Int           @default(1)
+  archivedAt             DateTime?
+  company                Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer               Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items                  InvoiceItem[]
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  @@unique([companyId, number])
+  @@index([companyId, status, issueDate])
+  @@index([companyId, customerId])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  invoiceId      String   @db.Uuid
+  productId      String?  @db.Uuid
+  description    String
+  quantity       Decimal  @db.Decimal(12, 4)
+  unit           String
+  unitPriceMinor Int
+  vatRate        Decimal  @db.Decimal(5, 2)
+  subtotalMinor  Int
+  vatMinor       Int
+  totalMinor     Int
+  position       Int
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([invoiceId, position])
+  @@index([productId])
+  @@map("invoice_items")
 }
 
 enum CustomerStatus {
@@ -168,6 +228,15 @@ enum CustomerType {
 enum ProductType {
   PRODUCT
   SERVICE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
 }
 
 enum CompanyRole {

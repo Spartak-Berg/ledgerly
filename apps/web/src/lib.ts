@@ -1,5 +1,10 @@
 export const money = (value: number, currency = 'NOK') =>
-  new Intl.NumberFormat('nb-NO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
+  new Intl.NumberFormat('nb-NO', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 
 export const shortDate = (value: string) =>
   new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value))

@@ -24,6 +24,14 @@ interface ProductResponse {
   defaultQuantity: number;
   vatRate: number;
 }
+interface InvoiceResponse {
+  id: string;
+  version: number;
+  status: string;
+  subtotalMinor: number;
+  vatMinor: number;
+  totalMinor: number;
+}
 
 const csrfFrom = (response: request.Response): string => {
   const values = response.headers['set-cookie'] as unknown as
@@ -42,7 +50,9 @@ describe('Ledgerly API (e2e)', () => {
   let agent: ReturnType<typeof request.agent>;
   let csrfToken = '';
   let createdCustomerId: string | undefined;
+  let invoiceCustomerId: string | undefined;
   const createdProductIds: string[] = [];
+  const createdInvoiceIds: string[] = [];
   let createdUserId: string | undefined;
   let primaryCompanyId = '';
   let accountantCompanyId = '';
@@ -305,6 +315,95 @@ describe('Ledgerly API (e2e)', () => {
       );
   });
 
+  it('persists tenant-scoped drafts and rejects stale totals updates', async () => {
+    const customer = await agent
+      .post('/api/v1/customers')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ companyName: 'Invoice Test Customer' })
+      .expect(201);
+    invoiceCustomerId = (customer.body as unknown as CustomerResponse).id;
+    const draft = {
+      customerId: invoiceCustomerId,
+      issueDate: '2026-08-16',
+      dueDate: '2026-08-30',
+      currency: 'NOK',
+      notes: 'Draft note',
+      items: [
+        {
+          description: 'Fractional consulting',
+          quantity: 1.5,
+          unit: 'hour',
+          unitPriceMinor: 120000,
+          vatRate: 25,
+        },
+      ],
+    };
+    await agent
+      .post('/api/v1/invoices')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ ...draft, totalMinor: 1 })
+      .expect(400);
+    const created = await agent
+      .post('/api/v1/invoices')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send(draft)
+      .expect(201);
+    const createdBody = created.body as unknown as InvoiceResponse;
+    createdInvoiceIds.push(createdBody.id);
+    expect(createdBody).toMatchObject({
+      status: 'DRAFT',
+      version: 1,
+      subtotalMinor: 180000,
+      vatMinor: 45000,
+      totalMinor: 225000,
+    });
+
+    await agent
+      .get(`/api/v1/invoices/${createdBody.id}`)
+      .set('x-company-id', accountantCompanyId)
+      .expect(404);
+    await agent
+      .patch(`/api/v1/invoices/${createdBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        ...draft,
+        version: 1,
+        items: [{ ...draft.items[0], quantity: 2 }],
+      })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          version: 2,
+          subtotalMinor: 240000,
+          totalMinor: 300000,
+        });
+      });
+    await agent
+      .patch(`/api/v1/invoices/${createdBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ ...draft, version: 1 })
+      .expect(409);
+
+    const duplicate = await agent
+      .post(`/api/v1/invoices/${createdBody.id}/duplicate`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(201);
+    const duplicateBody = duplicate.body as unknown as InvoiceResponse;
+    createdInvoiceIds.push(duplicateBody.id);
+    await agent
+      .delete(`/api/v1/invoices/${duplicateBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(200)
+      .expect({ archived: true });
+  });
+
   it('rotates refresh credentials and revokes the session on logout', async () => {
     const refreshed = await agent
       .post('/api/v1/auth/refresh')
@@ -332,12 +431,19 @@ describe('Ledgerly API (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (createdInvoiceIds.length)
+      await prisma.invoice.deleteMany({
+        where: { id: { in: createdInvoiceIds } },
+      });
     if (createdProductIds.length)
       await prisma.product.deleteMany({
         where: { id: { in: createdProductIds } },
       });
     if (createdCustomerId) {
       await prisma.customer.deleteMany({ where: { id: createdCustomerId } });
+    }
+    if (invoiceCustomerId) {
+      await prisma.customer.deleteMany({ where: { id: invoiceCustomerId } });
     }
     if (createdUserId) {
       await prisma.user.deleteMany({ where: { id: createdUserId } });

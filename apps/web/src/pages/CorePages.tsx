@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Area,
@@ -33,6 +33,11 @@ import { CustomerDialog } from '../CustomerDialog';
 import { cashFlow, expenses, invoices } from '../data';
 import { money, shortDate, type Customer } from '../lib';
 import { useAuth } from '../useAuth';
+import {
+  invoicesApi,
+  type Invoice as PersistedInvoice,
+  type InvoiceStatus as PersistedInvoiceStatus,
+} from '../invoices-api';
 
 export function Dashboard() {
   const { profile } = useAuth();
@@ -665,31 +670,78 @@ export function CustomerDetail() {
 }
 
 export function Invoices() {
+  const { profile } = useAuth();
+  const canManage = profile?.company.role !== 'EMPLOYEE';
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('All');
-  const list = useMemo(
-    () =>
-      invoices.filter(
-        (x) =>
-          (tab === 'All' || x.status === tab) &&
-          `${x.number} ${x.customer}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [query, tab],
-  );
+  const [list, setList] = useState<PersistedInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [pendingArchive, setPendingArchive] = useState<PersistedInvoice>();
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set('search', query.trim());
+      if (tab !== 'All') params.set('status', tab.toUpperCase());
+      setLoading(true);
+      invoicesApi
+        .list(params)
+        .then((result) => {
+          if (!active) return;
+          setList(result);
+          setError('');
+        })
+        .catch((reason: unknown) =>
+          active &&
+          setError(reason instanceof Error ? reason.message : 'Could not load invoices'),
+        )
+        .finally(() => active && setLoading(false));
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, tab]);
+
+  const label = (status: PersistedInvoiceStatus) =>
+    status
+      .toLowerCase()
+      .replace('_', ' ')
+      .replace(/^./, (character) => character.toUpperCase());
+
+  const duplicate = async (invoice: PersistedInvoice) => {
+    try {
+      const copy = await invoicesApi.duplicate(invoice.id);
+      setList((current) => [copy, ...current]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not duplicate invoice');
+    }
+  };
+
+  const archive = async () => {
+    if (!pendingArchive) return;
+    try {
+      await invoicesApi.archive(pendingArchive.id);
+      setList((current) => current.filter((item) => item.id !== pendingArchive.id));
+      setPendingArchive(undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not archive invoice');
+    }
+  };
   return (
     <div className="page">
       <PageHeader
         title="Invoices"
         description="Create, send and track customer invoices."
         action={
-          <Link
+          canManage ? <Link
             className="button button-primary"
             to="/invoices/new"
           >
             <Plus size={16} /> Create invoice
-          </Link>
+          </Link> : undefined
         }
       />
       <div className="tabs invoice-tabs">
@@ -700,11 +752,6 @@ export function Invoices() {
             key={x}
           >
             {x}
-            <span>
-              {x === 'All'
-                ? invoices.length
-                : invoices.filter((i) => i.status === x).length}
-            </span>
           </button>
         ))}
       </div>
@@ -715,18 +762,9 @@ export function Invoices() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search invoices…"
           />
-          <div>
-            <Select>
-              <option>All dates</option>
-              <option>This month</option>
-              <option>Last month</option>
-            </Select>
-            <Button variant="secondary">
-              <Filter size={16} /> Filters
-            </Button>
-          </div>
         </div>
-        <TableWrap>
+        {error && <div className="api-error" role="alert">{error}</div>}
+        {loading ? <LoadingSkeleton /> : list.length ? <TableWrap>
           <table>
             <thead>
               <tr>
@@ -742,26 +780,48 @@ export function Invoices() {
             <tbody>
               {list.map((x) => (
                 <tr key={x.id}>
-                  <td className="strong">{x.number}</td>
-                  <td>{x.customer}</td>
+                  <td className="strong">{x.number ?? 'Draft'}</td>
+                  <td>{x.customerNameSnapshot}</td>
                   <td>{shortDate(x.issueDate)}</td>
-                  <td className={x.status === 'Overdue' ? 'overdue' : ''}>
+                  <td className={x.status === 'OVERDUE' ? 'overdue' : ''}>
                     {shortDate(x.dueDate)}
                   </td>
                   <td>
-                    <StatusBadge>{x.status}</StatusBadge>
+                    <StatusBadge>{label(x.status)}</StatusBadge>
                   </td>
-                  <td className="number strong">{money(x.amount)}</td>
+                  <td className="number strong">
+                    {money(x.totalMinor / 100, x.currency)}
+                  </td>
                   <td>
-                    <MenuButton />
+                    {x.status === 'DRAFT' && canManage && (
+                      <div className="row-actions">
+                        <Link className="button button-ghost" to={`/invoices/${x.id}/edit`}>
+                          <Pencil size={15} /> Edit
+                        </Link>
+                        <Button variant="ghost" onClick={() => void duplicate(x)}>
+                          Duplicate
+                        </Button>
+                        <Button variant="ghost" onClick={() => setPendingArchive(x)}>
+                          Archive
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </TableWrap>
-        <Pagination />
+        </TableWrap> : <EmptyState title="No invoices found" description="Create a draft or adjust the current filters." />}
       </Card>
+      {pendingArchive && (
+        <ConfirmDialog
+          title="Archive this draft?"
+          description="The draft will be hidden from the invoice list."
+          confirmLabel="Archive draft"
+          onCancel={() => setPendingArchive(undefined)}
+          onConfirm={() => void archive()}
+        />
+      )}
     </div>
   );
 }

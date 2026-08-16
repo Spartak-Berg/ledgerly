@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useBlocker,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -38,6 +44,7 @@ import {
 import {
   Button,
   Card,
+  ConfirmDialog,
   Field,
   Input,
   MetricCard,
@@ -52,6 +59,8 @@ import { useAuth } from '../useAuth';
 import { cashFlow } from '../data';
 import { downloadInvoicePdf } from '../invoicePdf';
 import { invoiceTotals, money, type Customer, type LineItem } from '../lib';
+import { invoicesApi, type InvoiceDraftInput } from '../invoices-api';
+import { productsApi, type Product } from '../products-api';
 
 const invoiceSchema = z.object({
   customer: z.string().min(1, 'Select a customer'),
@@ -65,8 +74,10 @@ const invoiceSchema = z.object({
     .array(
       z.object({
         id: z.string(),
+        productId: z.string().optional(),
         description: z.string().min(1),
         quantity: z.number().min(0.01),
+        unit: z.string().min(1),
         unitPrice: z.number().min(0),
         vatRate: z.number(),
       }),
@@ -74,47 +85,63 @@ const invoiceSchema = z.object({
     .min(1),
 });
 type InvoiceForm = z.infer<typeof invoiceSchema>;
+const isoDate = (value = new Date()) => value.toISOString().slice(0, 10);
+const addDays = (value: Date, days: number) => {
+  const result = new Date(value);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+};
+
 export function CreateInvoice() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [customerList, setCustomerList] = useState<Customer[]>([]);
+  const [productList, setProductList] = useState<Product[]>([]);
   const [customersLoading, setCustomersLoading] = useState(true);
   const [customersError, setCustomersError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [version, setVersion] = useState(1);
+  const allowNavigation = useRef(false);
   const {
     register,
     control,
     watch,
     handleSubmit,
     setError,
-    formState: { errors },
+    setValue,
+    reset,
+    formState: { errors, isDirty },
   } = useForm<InvoiceForm>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       customer: searchParams.get('customer') ?? '',
-      number: 'INV-2026-0143',
-      issueDate: '2026-07-21',
-      dueDate: '2026-08-20',
+      number: 'Draft',
+      issueDate: isoDate(),
+      dueDate: isoDate(addDays(new Date(), 14)),
       currency: 'NOK',
       notes: 'Thank you for your business.',
       terms: 'Payment due within 30 days.',
       items: [
         {
           id: crypto.randomUUID(),
-          description: 'Brand strategy and visual direction',
+          productId: '',
+          description: '',
           quantity: 1,
-          unitPrice: 32000,
-          vatRate: 25,
-        },
-        {
-          id: crypto.randomUUID(),
-          description: 'Design system implementation',
-          quantity: 24,
-          unitPrice: 1450,
+          unit: 'item',
+          unitPrice: 0,
           vatRate: 25,
         },
       ],
     },
   });
+  const navigationBlocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty &&
+      !allowNavigation.current &&
+      currentLocation.pathname !== nextLocation.pathname,
+  );
   useEffect(() => {
     let active = true;
     customerApi
@@ -131,6 +158,63 @@ export function CreateInvoice() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    productsApi
+      .list()
+      .then((products) => active && setProductList(products.filter((item) => item.active)))
+      .catch(() => active && setProductList([]));
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    invoicesApi
+      .get(id)
+      .then((invoice) => {
+        if (!active) return;
+        if (invoice.status !== 'DRAFT') {
+          setSaveError('Only draft invoices can be edited.');
+          return;
+        }
+        setVersion(invoice.version);
+        reset({
+          customer: invoice.customerId,
+          number: invoice.number ?? 'Draft',
+          issueDate: invoice.issueDate.slice(0, 10),
+          dueDate: invoice.dueDate.slice(0, 10),
+          currency: invoice.currency,
+          notes: invoice.notes ?? '',
+          terms: invoice.paymentTerms ?? '',
+          items: (invoice.items ?? []).map((item) => ({
+            id: item.id,
+            productId: item.productId ?? '',
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPriceMinor / 100,
+            vatRate: item.vatRate,
+          })),
+        });
+      })
+      .catch((reason: unknown) =>
+        active &&
+        setSaveError(reason instanceof Error ? reason.message : 'Could not load draft'),
+      );
+    return () => {
+      active = false;
+    };
+  }, [id, reset]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
   // React Hook Form's watch subscription intentionally drives the live preview.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -145,9 +229,38 @@ export function CreateInvoice() {
     }
     await downloadInvoicePdf({ ...data, customer: selectedCustomer });
   };
-  const save = (action: string) => () => {
-    window.alert(`Invoice ${action} (mock workflow)`);
-    navigate('/invoices');
+  const save = async (data: InvoiceForm) => {
+    setSaving(true);
+    setSaveError('');
+    const input: InvoiceDraftInput = {
+      customerId: data.customer,
+      issueDate: data.issueDate,
+      dueDate: data.dueDate,
+      currency: data.currency,
+      notes: data.notes || null,
+      paymentTerms: data.terms || null,
+      items: data.items.map((item) => ({
+        productId: item.productId || null,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPriceMinor: Math.round(item.unitPrice * 100),
+        vatRate: item.vatRate,
+      })),
+    };
+    try {
+      const invoice = id
+        ? await invoicesApi.update(id, { ...input, version })
+        : await invoicesApi.create(input);
+      setVersion(invoice.version);
+      reset(data);
+      allowNavigation.current = true;
+      navigate('/invoices');
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : 'Could not save draft');
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <div className="page invoice-create">
@@ -158,10 +271,10 @@ export function CreateInvoice() {
         <StatusBadge>Draft</StatusBadge>
       </div>
       <PageHeader
-        title="Create invoice"
-        description="Prepare and send a professional invoice to your customer."
+        title={id ? 'Edit invoice draft' : 'Create invoice'}
+        description="Prepare a draft. Invoice numbering and sending happen when it is issued."
       />
-      <form onSubmit={handleSubmit(save('saved'))}>
+      <form onSubmit={handleSubmit(save)}>
         <div className="invoice-layout">
           <div className="form-column">
             <Card>
@@ -172,7 +285,7 @@ export function CreateInvoice() {
                     <option value="">
                       {customersLoading ? 'Loading customers…' : 'Select customer'}
                     </option>
-                    {customerList.map((x) => (
+                    {customerList.filter((x) => x.status !== 'Archived').map((x) => (
                       <option
                         key={x.id}
                         value={x.id}
@@ -192,7 +305,8 @@ export function CreateInvoice() {
                   )}
                 </Field>
                 <Field label="Invoice number">
-                  <Input {...register('number')} />
+                  <Input {...register('number')} disabled />
+                  <small>Assigned when the invoice is issued.</small>
                 </Field>
                 <Field label="Issue date">
                   <Input
@@ -225,7 +339,7 @@ export function CreateInvoice() {
               <div className="line-items">
                 <div className="line-head">
                   <span>Description</span>
-                  <span>Qty</span>
+                  <span>Qty / unit</span>
                   <span>Unit price</span>
                   <span>VAT</span>
                   <span>Total</span>
@@ -236,30 +350,77 @@ export function CreateInvoice() {
                     className="line-item"
                     key={field.id}
                   >
-                    <Input
-                      aria-label={`Item ${index + 1} description`}
-                      {...register(`items.${index}.description`)}
-                    />
-                    <Input
-                      aria-label="Quantity"
-                      type="number"
-                      step="0.01"
-                      {...register(`items.${index}.quantity`, { valueAsNumber: true })}
-                    />
+                    <div className="line-description">
+                      <Select
+                        aria-label={`Item ${index + 1} product or service`}
+                        value={values.items[index]?.productId ?? ''}
+                        onChange={(event) => {
+                          const productId = event.target.value;
+                          setValue(`items.${index}.productId`, productId, {
+                            shouldDirty: true,
+                          });
+                          const product = productList.find((item) => item.id === productId);
+                          if (!product) return;
+                          setValue(
+                            `items.${index}.description`,
+                            product.description || product.name,
+                            { shouldDirty: true },
+                          );
+                          setValue(`items.${index}.quantity`, product.defaultQuantity, {
+                            shouldDirty: true,
+                          });
+                          setValue(`items.${index}.unit`, product.unit, {
+                            shouldDirty: true,
+                          });
+                          setValue(
+                            `items.${index}.unitPrice`,
+                            product.unitPriceMinor / 100,
+                            { shouldDirty: true },
+                          );
+                          setValue(`items.${index}.vatRate`, product.vatRate, {
+                            shouldDirty: true,
+                          });
+                        }}
+                      >
+                        <option value="">Custom line</option>
+                        {productList
+                          .filter((item) => item.currency === values.currency)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                      </Select>
+                      <Input
+                        aria-label={`Item ${index + 1} description`}
+                        {...register(`items.${index}.description`)}
+                      />
+                    </div>
+                    <div className="line-quantity">
+                      <Input
+                        aria-label="Quantity"
+                        type="number"
+                        step="0.0001"
+                        {...register(`items.${index}.quantity`, { valueAsNumber: true })}
+                      />
+                      <Input
+                        aria-label="Unit"
+                        {...register(`items.${index}.unit`)}
+                      />
+                    </div>
                     <Input
                       aria-label="Unit price"
                       type="number"
                       {...register(`items.${index}.unitPrice`, { valueAsNumber: true })}
                     />
-                    <Select
+                    <Input
                       aria-label="VAT rate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
                       {...register(`items.${index}.vatRate`, { valueAsNumber: true })}
-                    >
-                      <option value="25">25%</option>
-                      <option value="15">15%</option>
-                      <option value="12">12%</option>
-                      <option value="0">0%</option>
-                    </Select>
+                    />
                     <b>
                       {money(
                         (values.items[index]?.quantity || 0) *
@@ -284,8 +445,10 @@ export function CreateInvoice() {
                 onClick={() =>
                   append({
                     id: crypto.randomUUID(),
+                    productId: '',
                     description: '',
                     quantity: 1,
+                    unit: 'item',
                     unitPrice: 0,
                     vatRate: 25,
                   })
@@ -349,28 +512,36 @@ export function CreateInvoice() {
             />
           </aside>
         </div>
+        {saveError && (
+          <div className="api-error" role="alert">
+            {saveError}
+          </div>
+        )}
         <div className="sticky-actions">
           <Button
-            type="button"
-            variant="secondary"
-            onClick={handleSubmit(save('saved as draft'))}
+            type="submit"
+            disabled={saving}
           >
-            <Save size={16} /> Save as draft
+            <Save size={16} /> {saving ? 'Saving…' : 'Save draft'}
           </Button>
           <Button
             type="button"
-            variant="secondary"
+            disabled
+            title="Invoice issuing is added in the next implementation chunk"
           >
-            Preview
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSubmit(save('sent'))}
-          >
-            <Send size={16} /> Send invoice
+            <Send size={16} /> Issue & send
           </Button>
         </div>
       </form>
+      {navigationBlocker.state === 'blocked' && (
+        <ConfirmDialog
+          title="Leave without saving?"
+          description="Your unsaved invoice changes will be lost."
+          confirmLabel="Leave page"
+          onCancel={() => navigationBlocker.reset()}
+          onConfirm={() => navigationBlocker.proceed()}
+        />
+      )}
     </div>
   );
 }

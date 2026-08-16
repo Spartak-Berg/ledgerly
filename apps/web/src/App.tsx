@@ -36,6 +36,7 @@ function ProtectedRoutes() {
     <Route path="/products" element={<ProductsPage />} />
     <Route path="/invoices" element={<Invoices />} />
     <Route path="/invoices/new" element={<CreateInvoice />} />
+    <Route path="/invoices/:id/edit" element={<CreateInvoice />} />
     <Route path="/expenses" element={<Expenses />} />
     <Route path="/expenses/upload" element={<UploadReceipt />} />
     <Route path="/reports" element={<Reports />} />
