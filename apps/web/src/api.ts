@@ -1,6 +1,6 @@
 import type { Customer, CustomerStatus } from './lib';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 type ApiCustomerStatus = 'ACTIVE' | 'LEAD' | 'ARCHIVED';
 

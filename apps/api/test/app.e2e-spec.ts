@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { configureApp } from './../src/app.setup';
 
 interface CustomerResponse {
   id: string;
@@ -22,27 +23,21 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        forbidNonWhitelisted: true,
-        transform: true,
-        whitelist: true,
-      }),
-    );
+    configureApp(app);
     await app.init();
     prisma = app.get(PrismaService);
   });
 
-  it('/ (GET)', () => {
+  it('/api/v1 (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api/v1')
       .expect(200)
-      .expect('Hello World!');
+      .expect({ service: 'ledgerly-api', status: 'ok' });
   });
 
   it('/customers (CRUD)', async () => {
     const created = await request(app.getHttpServer())
-      .post('/customers')
+      .post('/api/v1/customers')
       .send({
         companyName: 'Ledgerly API Test Customer',
         contactName: 'Test Contact',
@@ -58,7 +53,7 @@ describe('AppController (e2e)', () => {
     });
 
     await request(app.getHttpServer())
-      .get(`/customers/${createdCustomerId}`)
+      .get(`/api/v1/customers/${createdCustomerId}`)
       .expect(200)
       .expect((response) => {
         const body = response.body as unknown as CustomerResponse;
@@ -66,7 +61,7 @@ describe('AppController (e2e)', () => {
       });
 
     await request(app.getHttpServer())
-      .patch(`/customers/${createdCustomerId}`)
+      .patch(`/api/v1/customers/${createdCustomerId}`)
       .send({ status: 'ARCHIVED' })
       .expect(200)
       .expect((response) => {
@@ -75,7 +70,7 @@ describe('AppController (e2e)', () => {
       });
 
     await request(app.getHttpServer())
-      .patch(`/customers/${createdCustomerId}`)
+      .patch(`/api/v1/customers/${createdCustomerId}`)
       .send({ contactName: null, email: null })
       .expect(200)
       .expect((response) => {
@@ -88,7 +83,7 @@ describe('AppController (e2e)', () => {
       });
 
     await request(app.getHttpServer())
-      .delete(`/customers/${createdCustomerId}`)
+      .delete(`/api/v1/customers/${createdCustomerId}`)
       .expect(204);
     createdCustomerId = undefined;
   });

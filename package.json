@@ -1,0 +1,13 @@
+{
+  "name": "ledgerly",
+  "private": true,
+  "scripts": {
+    "install:all": "npm ci --prefix apps/api && npm ci --prefix apps/web",
+    "dev:api": "npm run start:dev --prefix apps/api",
+    "dev:web": "npm run dev --prefix apps/web",
+    "db:generate": "npm run prisma:generate --prefix apps/api",
+    "db:migrate": "npm run prisma:migrate --prefix apps/api",
+    "db:seed": "npm run prisma:seed --prefix apps/api",
+    "check": "npm run lint --prefix apps/web && npm run build --prefix apps/web && npm run lint:check --prefix apps/api && npm run test --prefix apps/api -- --runInBand && npm run build --prefix apps/api"
+  }
+}

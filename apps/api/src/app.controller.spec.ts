@@ -15,8 +15,11 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('returns service health', () => {
+      expect(appController.getHealth()).toEqual({
+        service: 'ledgerly-api',
+        status: 'ok',
+      });
     });
   });
 });
