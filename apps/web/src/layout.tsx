@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
   LogOut,
   Check,
+  PackageOpen,
 } from 'lucide-react';
 import { Button } from './components';
 import { useAuth } from './useAuth';
@@ -25,6 +26,7 @@ import { companyApi, type CompanySummary } from './company-api';
 const nav = [
   ['Dashboard', '/', LayoutDashboard],
   ['Customers', '/customers', Users],
+  ['Products & Services', '/products', PackageOpen],
   ['Invoices', '/invoices', FileText],
   ['Expenses', '/expenses', Receipt],
   ['Reports', '/reports', ChartNoAxesCombined],

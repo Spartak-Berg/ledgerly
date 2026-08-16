@@ -45,11 +45,36 @@ model Company {
   settings           CompanySettings?
   selectedBy         User[]           @relation("SelectedCompany")
   customers          Customer[]
+  products           Product[]
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
   @@index([name])
   @@map("companies")
+}
+
+model Product {
+  id              String      @id @default(uuid()) @db.Uuid
+  companyId       String      @db.Uuid
+  name            String
+  description     String?
+  sku             String?
+  type            ProductType @default(SERVICE)
+  unit            String      @default("hour")
+  defaultQuantity Decimal     @default(1) @db.Decimal(12, 4)
+  unitPriceMinor  Int
+  vatRate         Decimal     @default(25) @db.Decimal(5, 2)
+  currency        String      @default("NOK") @db.VarChar(3)
+  category        String?
+  active          Boolean     @default(true)
+  archivedAt      DateTime?
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([companyId, sku])
+  @@index([companyId, active, name])
+  @@map("products")
 }
 
 model CompanyMember {
@@ -138,6 +163,11 @@ enum CustomerStatus {
 enum CustomerType {
   COMPANY
   INDIVIDUAL
+}
+
+enum ProductType {
+  PRODUCT
+  SERVICE
 }
 
 enum CompanyRole {

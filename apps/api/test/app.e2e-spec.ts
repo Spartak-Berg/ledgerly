@@ -16,6 +16,14 @@ interface AuthResponse {
   user: { id: string; email: string; fullName: string };
   company: { id: string; name: string; role: string };
 }
+interface ProductResponse {
+  id: string;
+  sku: string | null;
+  active: boolean;
+  unitPriceMinor: number;
+  defaultQuantity: number;
+  vatRate: number;
+}
 
 const csrfFrom = (response: request.Response): string => {
   const values = response.headers['set-cookie'] as unknown as
@@ -34,6 +42,7 @@ describe('Ledgerly API (e2e)', () => {
   let agent: ReturnType<typeof request.agent>;
   let csrfToken = '';
   let createdCustomerId: string | undefined;
+  const createdProductIds: string[] = [];
   let createdUserId: string | undefined;
   let primaryCompanyId = '';
   let accountantCompanyId = '';
@@ -250,6 +259,52 @@ describe('Ledgerly API (e2e)', () => {
       .expect(204);
   });
 
+  it('creates, duplicates and archives precise catalogue items', async () => {
+    const created = await agent
+      .post('/api/v1/products')
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        name: 'Consulting',
+        description: 'Technical consulting',
+        sku: 'CONSULT',
+        type: 'SERVICE',
+        unit: 'hour',
+        defaultQuantity: 1.5,
+        unitPriceMinor: 120000,
+        vatRate: 25,
+        currency: 'NOK',
+        category: 'Services',
+        active: true,
+      })
+      .expect(201);
+    const createdBody = created.body as unknown as ProductResponse;
+    createdProductIds.push(createdBody.id);
+    expect(createdBody).toMatchObject({
+      unitPriceMinor: 120000,
+      defaultQuantity: 1.5,
+      vatRate: 25,
+    });
+    const duplicate = await agent
+      .post(`/api/v1/products/${createdBody.id}/duplicate`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(201);
+    const duplicateBody = duplicate.body as unknown as ProductResponse;
+    createdProductIds.push(duplicateBody.id);
+    expect(duplicateBody.sku).toBeNull();
+    await agent
+      .delete(`/api/v1/products/${createdBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(200)
+      .expect((response) =>
+        expect((response.body as unknown as ProductResponse).active).toBe(
+          false,
+        ),
+      );
+  });
+
   it('rotates refresh credentials and revokes the session on logout', async () => {
     const refreshed = await agent
       .post('/api/v1/auth/refresh')
@@ -277,6 +332,10 @@ describe('Ledgerly API (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (createdProductIds.length)
+      await prisma.product.deleteMany({
+        where: { id: { in: createdProductIds } },
+      });
     if (createdCustomerId) {
       await prisma.customer.deleteMany({ where: { id: createdCustomerId } });
     }

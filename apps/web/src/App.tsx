@@ -22,6 +22,7 @@ const UploadReceipt = workflowPage('UploadReceipt')
 const Reports = workflowPage('Reports')
 const SettingsPage = workflowPage('SettingsPage')
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })))
+const ProductsPage = lazy(() => import('./pages/ProductsPage').then(module => ({ default: module.ProductsPage })))
 
 function ProtectedRoutes() {
   const { loading, profile } = useAuth()
@@ -32,6 +33,7 @@ function ProtectedRoutes() {
     <Route path="/" element={<Dashboard />} />
     <Route path="/customers" element={<Customers />} />
     <Route path="/customers/:id" element={<CustomerDetail />} />
+    <Route path="/products" element={<ProductsPage />} />
     <Route path="/invoices" element={<Invoices />} />
     <Route path="/invoices/new" element={<CreateInvoice />} />
     <Route path="/expenses" element={<Expenses />} />
