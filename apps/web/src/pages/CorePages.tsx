@@ -32,6 +32,7 @@ import {
   ConfirmDialog,
   EmptyState,
   LoadingSkeleton,
+  Input,
   MenuButton,
   MetricCard,
   PageHeader,
@@ -797,13 +798,31 @@ export function Invoices() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pendingArchive, setPendingArchive] = useState<PersistedInvoice>();
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
 
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams();
       if (query.trim()) params.set('search', query.trim());
-      if (tab !== 'All') params.set('status', tab.toUpperCase());
+      if (tab === 'Outstanding') params.set('outstanding', 'true');
+      else if (tab !== 'All')
+        params.set('status', tab.toUpperCase().replace(' ', '_'));
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (minAmount)
+        params.set(
+          'minAmountMinor',
+          String(Math.round(Number(minAmount) * 100)),
+        );
+      if (maxAmount)
+        params.set(
+          'maxAmountMinor',
+          String(Math.round(Number(maxAmount) * 100)),
+        );
       setLoading(true);
       invoicesApi
         .list(params)
@@ -827,7 +846,7 @@ export function Invoices() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [query, tab]);
+  }, [query, tab, dateFrom, dateTo, minAmount, maxAmount]);
 
   const label = (status: PersistedInvoiceStatus) =>
     status
@@ -876,17 +895,25 @@ export function Invoices() {
         }
       />
       <div className="tabs invoice-tabs">
-        {['All', 'Draft', 'Issued', 'Sent', 'Paid', 'Overdue', 'Void'].map(
-          (x) => (
-            <button
-              className={tab === x ? 'active' : ''}
-              onClick={() => setTab(x)}
-              key={x}
-            >
-              {x}
-            </button>
-          ),
-        )}
+        {[
+          'All',
+          'Outstanding',
+          'Draft',
+          'Issued',
+          'Sent',
+          'Partially paid',
+          'Paid',
+          'Overdue',
+          'Void',
+        ].map((x) => (
+          <button
+            className={tab === x ? 'active' : ''}
+            onClick={() => setTab(x)}
+            key={x}
+          >
+            {x}
+          </button>
+        ))}
       </div>
       <Card>
         <div className="filterbar">
@@ -895,6 +922,40 @@ export function Invoices() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search invoices…"
           />
+          <div>
+            <Input
+              aria-label="Issued from"
+              title="Issued from"
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+            />
+            <Input
+              aria-label="Issued to"
+              title="Issued to"
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+            />
+            <Input
+              aria-label="Minimum amount"
+              placeholder="Min amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={minAmount}
+              onChange={(event) => setMinAmount(event.target.value)}
+            />
+            <Input
+              aria-label="Maximum amount"
+              placeholder="Max amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={maxAmount}
+              onChange={(event) => setMaxAmount(event.target.value)}
+            />
+          </div>
         </div>
         {error && (
           <div className="api-error" role="alert">
@@ -935,6 +996,11 @@ export function Invoices() {
                     </td>
                     <td className="number strong">
                       {money(x.totalMinor / 100, x.currency)}
+                      {x.amountPaidMinor > 0 && (
+                        <small>
+                          {money(x.remainingMinor / 100, x.currency)} remaining
+                        </small>
+                      )}
                     </td>
                     <td>
                       {x.status === 'DRAFT' && canManage && (

@@ -18,10 +18,18 @@ import {
   assertInvoiceTransition,
   effectiveInvoiceStatus,
 } from './invoice-status.policy';
+import { paymentBalance } from '../payments/payment-balance';
 
 const date = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const text = (value?: string | null) => value?.trim() || null;
-const includeItems = { items: { orderBy: { position: 'asc' as const } } };
+const activePayments = {
+  where: { reversedAt: null },
+  select: { amountMinor: true },
+};
+const includeItems = {
+  items: { orderBy: { position: 'asc' as const } },
+  payments: activePayments,
+};
 const companySnapshotSelect = {
   name: true,
   organisationNumber: true,
@@ -69,6 +77,40 @@ const detailView = <
   })),
 });
 
+const balanceView = <
+  T extends {
+    status: InvoiceStatus;
+    totalMinor: number;
+    dueDate: Date;
+    sentAt: Date | null;
+    payments: Array<{ amountMinor: number }>;
+  },
+>(
+  invoice: T,
+) => {
+  const { payments, ...view } = invoice;
+  const amountPaidMinor = payments.reduce(
+    (sum, payment) => sum + payment.amountMinor,
+    0,
+  );
+  const balance = paymentBalance(
+    invoice.totalMinor,
+    amountPaidMinor,
+    Boolean(invoice.sentAt),
+  );
+  const financialStatus =
+    invoice.status === InvoiceStatus.DRAFT ||
+    invoice.status === InvoiceStatus.VOID
+      ? invoice.status
+      : balance.status;
+  return {
+    ...view,
+    amountPaidMinor,
+    remainingMinor: balance.remainingMinor,
+    status: effectiveInvoiceStatus(financialStatus, invoice.dueDate),
+  };
+};
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -80,8 +122,18 @@ export class InvoicesService {
     const search = query.search?.trim();
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    const statusWhere: Prisma.InvoiceWhereInput =
-      query.status === InvoiceStatus.OVERDUE
+    const statusWhere: Prisma.InvoiceWhereInput = query.outstanding
+      ? {
+          status: {
+            in: [
+              InvoiceStatus.ISSUED,
+              InvoiceStatus.SENT,
+              InvoiceStatus.PARTIALLY_PAID,
+              InvoiceStatus.OVERDUE,
+            ],
+          },
+        }
+      : query.status === InvoiceStatus.OVERDUE
         ? {
             OR: [
               { status: InvoiceStatus.OVERDUE },
@@ -100,34 +152,51 @@ export class InvoicesService {
                 : {}),
             }
           : {};
+    const searchWhere: Prisma.InvoiceWhereInput = search
+      ? {
+          OR: [
+            { number: { contains: search, mode: 'insensitive' as const } },
+            {
+              customerNameSnapshot: {
+                contains: search,
+                mode: 'insensitive' as const,
+              },
+            },
+            { reference: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
     const invoices = await this.prisma.invoice.findMany({
       where: {
         companyId,
         archivedAt: null,
-        ...statusWhere,
-        ...(search
+        AND: [statusWhere, searchWhere],
+        ...(query.dateFrom || query.dateTo
           ? {
-              OR: [
-                { number: { contains: search, mode: 'insensitive' as const } },
-                {
-                  customerNameSnapshot: {
-                    contains: search,
-                    mode: 'insensitive' as const,
-                  },
-                },
-                {
-                  reference: { contains: search, mode: 'insensitive' as const },
-                },
-              ],
+              issueDate: {
+                ...(query.dateFrom ? { gte: date(query.dateFrom) } : {}),
+                ...(query.dateTo ? { lte: date(query.dateTo) } : {}),
+              },
+            }
+          : {}),
+        ...(query.minAmountMinor !== undefined ||
+        query.maxAmountMinor !== undefined
+          ? {
+              totalMinor: {
+                ...(query.minAmountMinor !== undefined
+                  ? { gte: query.minAmountMinor }
+                  : {}),
+                ...(query.maxAmountMinor !== undefined
+                  ? { lte: query.maxAmountMinor }
+                  : {}),
+              },
             }
           : {}),
       },
+      include: { payments: activePayments },
       orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
     });
-    return invoices.map((invoice) => ({
-      ...invoice,
-      status: effectiveInvoiceStatus(invoice.status, invoice.dueDate),
-    }));
+    return invoices.map(balanceView);
   }
 
   async get(companyId: string, id: string) {
@@ -136,10 +205,7 @@ export class InvoicesService {
       include: includeItems,
     });
     if (!invoice) throw new NotFoundException('Invoice was not found');
-    return detailView({
-      ...invoice,
-      status: effectiveInvoiceStatus(invoice.status, invoice.dueDate),
-    });
+    return balanceView(detailView(invoice));
   }
 
   async create(companyId: string, dto: InvoiceDraftDto) {
@@ -181,7 +247,7 @@ export class InvoicesService {
       },
       include: includeItems,
     });
-    return detailView(invoice);
+    return balanceView(detailView(invoice));
   }
 
   async update(companyId: string, id: string, dto: UpdateInvoiceDraftDto) {
@@ -250,7 +316,7 @@ export class InvoicesService {
         include: includeItems,
       });
     });
-    return detailView(invoice);
+    return balanceView(detailView(invoice));
   }
 
   async duplicate(companyId: string, id: string) {
@@ -326,7 +392,7 @@ export class InvoicesService {
         include: includeItems,
       });
     });
-    return detailView(invoice);
+    return balanceView(detailView(invoice));
   }
 
   async markSent(companyId: string, id: string) {
@@ -346,28 +412,50 @@ export class InvoicesService {
       where: { id },
       include: includeItems,
     });
-    return detailView(invoice);
+    return balanceView(detailView(invoice));
   }
 
   async void(companyId: string, id: string, dto: VoidInvoiceDto) {
-    const current = await this.findLifecycleInvoice(companyId, id);
-    assertInvoiceTransition(current.status, InvoiceStatus.VOID);
-    const result = await this.prisma.invoice.updateMany({
-      where: { id, companyId, status: current.status, archivedAt: null },
-      data: {
-        status: InvoiceStatus.VOID,
-        voidedAt: new Date(),
-        voidReason: dto.reason.trim(),
-        version: { increment: 1 },
-      },
+    const invoice = await this.prisma.$transaction(async (transaction) => {
+      const rows = await transaction.$queryRaw<
+        Array<{ id: string }>
+      >(Prisma.sql`
+          SELECT "id" FROM "invoices"
+          WHERE "id" = CAST(${id} AS UUID)
+            AND "companyId" = CAST(${companyId} AS UUID)
+            AND "archivedAt" IS NULL
+          FOR UPDATE
+        `);
+      if (rows.length !== 1)
+        throw new NotFoundException('Invoice was not found');
+      const current = await transaction.invoice.findUniqueOrThrow({
+        where: { id },
+        select: { status: true },
+      });
+      assertInvoiceTransition(current.status, InvoiceStatus.VOID);
+      const paymentCount = await transaction.payment.count({
+        where: { companyId, invoiceId: id, reversedAt: null },
+      });
+      if (paymentCount > 0) {
+        throw new ConflictException(
+          'Reverse active payments before voiding the invoice',
+        );
+      }
+      await transaction.invoice.update({
+        where: { id },
+        data: {
+          status: InvoiceStatus.VOID,
+          voidedAt: new Date(),
+          voidReason: dto.reason.trim(),
+          version: { increment: 1 },
+        },
+      });
+      return transaction.invoice.findUniqueOrThrow({
+        where: { id },
+        include: includeItems,
+      });
     });
-    if (result.count !== 1)
-      throw new ConflictException('Invoice status changed');
-    const invoice = await this.prisma.invoice.findUniqueOrThrow({
-      where: { id },
-      include: includeItems,
-    });
-    return detailView(invoice);
+    return balanceView(detailView(invoice));
   }
 
   async pdf(companyId: string, id: string) {

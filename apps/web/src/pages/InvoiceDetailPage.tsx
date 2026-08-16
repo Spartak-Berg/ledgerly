@@ -1,5 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Copy, Download, Pencil, Send, XCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Copy,
+  CreditCard,
+  Download,
+  Pencil,
+  RotateCcw,
+  Send,
+  XCircle,
+} from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Button,
@@ -7,15 +16,18 @@ import {
   ConfirmDialog,
   EmptyState,
   Field,
+  Input,
   LoadingSkeleton,
   PageHeader,
   StatusBadge,
+  Select,
   TableWrap,
   Textarea,
 } from '../components';
 import { invoicesApi, type Invoice, type InvoiceStatus } from '../invoices-api';
 import { money, shortDate } from '../lib';
 import { useAuth } from '../useAuth';
+import { paymentsApi, type Payment, type PaymentMethod } from '../payments-api';
 
 const statusLabel = (status: InvoiceStatus) =>
   status
@@ -37,12 +49,28 @@ export function InvoiceDetailPage() {
   const [confirmIssue, setConfirmIssue] = useState(false);
   const [showVoid, setShowVoid] = useState(false);
   const [voidReason, setVoidReason] = useState('');
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentDate, setPaymentDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>('BANK_TRANSFER');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+  const [reversing, setReversing] = useState<Payment>();
+  const [reversalReason, setReversalReason] = useState('');
 
   useEffect(() => {
     let active = true;
-    invoicesApi
-      .get(id)
-      .then((result) => active && setInvoice(result))
+    Promise.all([invoicesApi.get(id), paymentsApi.list(id)])
+      .then(([invoiceResult, paymentResult]) => {
+        if (!active) return;
+        setInvoice(invoiceResult);
+        setPayments(paymentResult);
+        setPaymentAmount(invoiceResult.remainingMinor / 100);
+      })
       .catch(
         (reason: unknown) =>
           active &&
@@ -115,6 +143,67 @@ export function InvoiceDetailPage() {
     void action(() => invoicesApi.void(invoice.id, voidReason));
   };
 
+  const submitPayment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!invoice) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await paymentsApi.record(invoice.id, {
+        amountMinor: Math.round(paymentAmount * 100),
+        paymentDate,
+        method: paymentMethod,
+        reference: paymentReference || null,
+        note: paymentNote || null,
+      });
+      setPayments((current) => [result.payment, ...current]);
+      setInvoice((current) =>
+        current ? { ...current, ...result.balance } : current,
+      );
+      setShowPayment(false);
+      setPaymentReference('');
+      setPaymentNote('');
+      setPaymentAmount(result.balance.remainingMinor / 100);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not record payment',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReversal = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!invoice || !reversing) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await paymentsApi.reverse(
+        invoice.id,
+        reversing.id,
+        reversalReason,
+      );
+      setPayments((current) =>
+        current.map((payment) =>
+          payment.id === result.payment.id ? result.payment : payment,
+        ),
+      );
+      setInvoice((current) =>
+        current ? { ...current, ...result.balance } : current,
+      );
+      setReversing(undefined);
+      setReversalReason('');
+      setPaymentAmount(result.balance.remainingMinor / 100);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not reverse payment',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return <LoadingSkeleton />;
   if (!invoice) {
     return (
@@ -127,9 +216,13 @@ export function InvoiceDetailPage() {
 
   const company = invoice.companySnapshot;
   const customer = invoice.customerSnapshot;
+  const activePayments = payments.filter((payment) => !payment.reversedAt);
   const canVoid = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'].includes(
     invoice.status,
   );
+  const canRecordPayment =
+    invoice.remainingMinor > 0 &&
+    ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status);
   return (
     <div className="page">
       <div className="back-row">
@@ -175,6 +268,17 @@ export function InvoiceDetailPage() {
                 <Send size={16} /> Mark sent
               </Button>
             )}
+            {canRecordPayment && canManage && (
+              <Button
+                onClick={() => {
+                  setPaymentAmount(invoice.remainingMinor / 100);
+                  setShowPayment(true);
+                }}
+                disabled={busy}
+              >
+                <CreditCard size={16} /> Record payment
+              </Button>
+            )}
             {canManage && (
               <Button
                 variant="secondary"
@@ -188,7 +292,12 @@ export function InvoiceDetailPage() {
               <Button
                 variant="ghost"
                 onClick={() => setShowVoid(true)}
-                disabled={busy}
+                disabled={busy || activePayments.length > 0}
+                title={
+                  activePayments.length
+                    ? 'Reverse active payments before voiding'
+                    : undefined
+                }
               >
                 <XCircle size={16} /> Void
               </Button>
@@ -283,6 +392,18 @@ export function InvoiceDetailPage() {
                 {money(invoice.totalMinor / 100, invoice.currency)}
               </strong>
             </div>
+            {invoice.amountPaidMinor > 0 && (
+              <div>
+                <span>Paid</span>
+                <b>{money(invoice.amountPaidMinor / 100, invoice.currency)}</b>
+              </div>
+            )}
+            <div>
+              <span>Remaining</span>
+              <strong>
+                {money(invoice.remainingMinor / 100, invoice.currency)}
+              </strong>
+            </div>
           </div>
         </Card>
         <Card>
@@ -325,6 +446,67 @@ export function InvoiceDetailPage() {
           </div>
         </Card>
       </div>
+      {invoice.status !== 'DRAFT' && (
+        <Card>
+          <div className="card-head padded">
+            <div>
+              <h3>Payments</h3>
+              <p>Recorded payments and explicit reversals</p>
+            </div>
+          </div>
+          {payments.length ? (
+            <TableWrap>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Method</th>
+                    <th>Reference</th>
+                    <th>Recorded by</th>
+                    <th>Status</th>
+                    <th className="number">Amount</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td>{shortDate(payment.paymentDate)}</td>
+                      <td>{payment.method.toLowerCase().replace('_', ' ')}</td>
+                      <td>{payment.reference || '—'}</td>
+                      <td>{payment.recordedBy.fullName}</td>
+                      <td>
+                        <StatusBadge>
+                          {payment.reversedAt ? 'Reversed' : 'Recorded'}
+                        </StatusBadge>
+                      </td>
+                      <td className="number strong">
+                        {money(payment.amountMinor / 100, invoice.currency)}
+                      </td>
+                      <td>
+                        {!payment.reversedAt && canManage && (
+                          <Button
+                            variant="ghost"
+                            onClick={() => setReversing(payment)}
+                            disabled={busy}
+                          >
+                            <RotateCcw size={15} /> Reverse
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          ) : (
+            <EmptyState
+              title="No payments recorded"
+              description="Record a payment to update the remaining balance."
+            />
+          )}
+        </Card>
+      )}
       {confirmIssue && (
         <ConfirmDialog
           title="Issue this invoice?"
@@ -335,6 +517,140 @@ export function InvoiceDetailPage() {
             void action(() => invoicesApi.issue(invoice.id, invoice.version))
           }
         />
+      )}
+      {showPayment && (
+        <div className="modal-backdrop">
+          <section
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-title"
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="payment-title">Record payment</h2>
+                <p>
+                  Remaining balance:{' '}
+                  {money(invoice.remainingMinor / 100, invoice.currency)}
+                </p>
+              </div>
+            </div>
+            <form onSubmit={(event) => void submitPayment(event)}>
+              <div className="form-grid">
+                <Field label={`Amount (${invoice.currency})`}>
+                  <Input
+                    autoFocus
+                    required
+                    type="number"
+                    min="0.01"
+                    max={invoice.remainingMinor / 100}
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(event) =>
+                      setPaymentAmount(Number(event.target.value))
+                    }
+                  />
+                </Field>
+                <Field label="Payment date">
+                  <Input
+                    required
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={paymentDate}
+                    onChange={(event) => setPaymentDate(event.target.value)}
+                  />
+                </Field>
+                <Field label="Method">
+                  <Select
+                    value={paymentMethod}
+                    onChange={(event) =>
+                      setPaymentMethod(event.target.value as PaymentMethod)
+                    }
+                  >
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="CARD">Card</option>
+                    <option value="CASH">Cash</option>
+                    <option value="OTHER">Other</option>
+                  </Select>
+                </Field>
+                <Field label="Reference">
+                  <Input
+                    maxLength={200}
+                    value={paymentReference}
+                    onChange={(event) =>
+                      setPaymentReference(event.target.value)
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label="Note">
+                <Textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={paymentNote}
+                  onChange={(event) => setPaymentNote(event.target.value)}
+                />
+              </Field>
+              <div className="modal-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowPayment(false)}
+                >
+                  Cancel
+                </Button>
+                <Button disabled={busy || paymentAmount <= 0}>
+                  {busy ? 'Recording…' : 'Record payment'}
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {reversing && (
+        <div className="modal-backdrop">
+          <section
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reverse-title"
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="reverse-title">Reverse payment</h2>
+                <p>
+                  {money(reversing.amountMinor / 100, invoice.currency)} remains
+                  in the audit history.
+                </p>
+              </div>
+            </div>
+            <form onSubmit={(event) => void submitReversal(event)}>
+              <Field label="Reason">
+                <Textarea
+                  autoFocus
+                  required
+                  minLength={3}
+                  maxLength={1000}
+                  rows={4}
+                  value={reversalReason}
+                  onChange={(event) => setReversalReason(event.target.value)}
+                />
+              </Field>
+              <div className="modal-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setReversing(undefined)}
+                >
+                  Cancel
+                </Button>
+                <Button disabled={busy || reversalReason.trim().length < 3}>
+                  {busy ? 'Reversing…' : 'Reverse payment'}
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
       )}
       {showVoid && (
         <div className="modal-backdrop">

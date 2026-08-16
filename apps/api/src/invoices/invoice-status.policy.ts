@@ -4,7 +4,12 @@ import { InvoiceStatus } from '@prisma/client';
 const transitions: Partial<Record<InvoiceStatus, ReadonlySet<InvoiceStatus>>> =
   {
     DRAFT: new Set([InvoiceStatus.ISSUED]),
-    ISSUED: new Set([InvoiceStatus.SENT, InvoiceStatus.VOID]),
+    ISSUED: new Set([
+      InvoiceStatus.SENT,
+      InvoiceStatus.PARTIALLY_PAID,
+      InvoiceStatus.PAID,
+      InvoiceStatus.VOID,
+    ]),
     SENT: new Set([
       InvoiceStatus.PARTIALLY_PAID,
       InvoiceStatus.PAID,

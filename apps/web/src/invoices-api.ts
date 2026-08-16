@@ -51,6 +51,8 @@ export interface Invoice {
   subtotalMinor: number;
   vatMinor: number;
   totalMinor: number;
+  amountPaidMinor: number;
+  remainingMinor: number;
   version: number;
   createdAt: string;
   updatedAt: string;

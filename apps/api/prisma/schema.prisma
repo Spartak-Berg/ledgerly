@@ -15,6 +15,8 @@ model User {
   emailVerifiedAt   DateTime?
   memberships       CompanyMember[]
   sessions          Session[]
+  recordedPayments  Payment[]       @relation("PaymentRecordedBy")
+  reversedPayments  Payment[]       @relation("PaymentReversedBy")
   selectedCompany   Company?        @relation("SelectedCompany", fields: [selectedCompanyId], references: [id], onDelete: SetNull)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -47,6 +49,7 @@ model Company {
   customers          Customer[]
   products           Product[]
   invoices           Invoice[]
+  payments           Payment[]
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -189,6 +192,7 @@ model Invoice {
   company                Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   customer               Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items                  InvoiceItem[]
+  payments               Payment[]
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
 
@@ -221,6 +225,30 @@ model InvoiceItem {
   @@map("invoice_items")
 }
 
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  companyId      String        @db.Uuid
+  invoiceId      String        @db.Uuid
+  amountMinor    Int
+  paymentDate    DateTime      @db.Date
+  method         PaymentMethod
+  reference      String?
+  note           String?
+  recordedById   String        @db.Uuid
+  reversedAt     DateTime?
+  reversedById   String?       @db.Uuid
+  reversalReason String?
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  invoice        Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  recordedBy     User          @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  reversedBy     User?         @relation("PaymentReversedBy", fields: [reversedById], references: [id], onDelete: Restrict)
+  createdAt      DateTime      @default(now())
+
+  @@index([companyId, paymentDate])
+  @@index([invoiceId, reversedAt])
+  @@map("payments")
+}
+
 enum CustomerStatus {
   ACTIVE
   LEAD
@@ -245,6 +273,13 @@ enum InvoiceStatus {
   PAID
   OVERDUE
   VOID
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  CASH
+  OTHER
 }
 
 enum CompanyRole {

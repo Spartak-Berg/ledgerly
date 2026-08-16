@@ -33,6 +33,14 @@ interface InvoiceResponse {
   vatMinor: number;
   totalMinor: number;
 }
+interface PaymentResultResponse {
+  payment: { id: string; reversedAt: string | null };
+  balance: {
+    amountPaidMinor: number;
+    remainingMinor: number;
+    status: string;
+  };
+}
 
 const csrfFrom = (response: request.Response): string => {
   const values = response.headers['set-cookie'] as unknown as
@@ -457,6 +465,106 @@ describe('Ledgerly API (e2e)', () => {
         expect(response.body).toMatchObject({ status: 'SENT' }),
       );
     await agent
+      .get(`/api/v1/invoices/${createdBody.id}/payments`)
+      .set('x-company-id', accountantCompanyId)
+      .expect(404);
+    const firstPayment = await agent
+      .post(`/api/v1/invoices/${createdBody.id}/payments`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        amountMinor: 120000,
+        paymentDate: '2026-08-16',
+        method: 'BANK_TRANSFER',
+        reference: 'PAYMENT-ONE',
+      })
+      .expect(201);
+    const firstPaymentBody =
+      firstPayment.body as unknown as PaymentResultResponse;
+    expect(firstPaymentBody.balance).toEqual({
+      amountPaidMinor: 120000,
+      remainingMinor: 180000,
+      status: 'PARTIALLY_PAID',
+    });
+    await agent
+      .post(`/api/v1/invoices/${createdBody.id}/void`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ reason: 'Cannot void with payment' })
+      .expect(409);
+
+    const concurrentPayments = await Promise.all([
+      agent
+        .post(`/api/v1/invoices/${createdBody.id}/payments`)
+        .set('x-company-id', primaryCompanyId)
+        .set('x-csrf-token', csrfToken)
+        .send({
+          amountMinor: 180000,
+          paymentDate: '2026-08-16',
+          method: 'BANK_TRANSFER',
+        }),
+      agent
+        .post(`/api/v1/invoices/${createdBody.id}/payments`)
+        .set('x-company-id', primaryCompanyId)
+        .set('x-csrf-token', csrfToken)
+        .send({
+          amountMinor: 180000,
+          paymentDate: '2026-08-16',
+          method: 'BANK_TRANSFER',
+        }),
+    ]);
+    expect(
+      concurrentPayments.map((response) => response.status).sort(),
+    ).toEqual([201, 400]);
+    const winningPayment = concurrentPayments.find(
+      (response) => response.status === 201,
+    );
+    const winningBody =
+      winningPayment?.body as unknown as PaymentResultResponse;
+    expect(winningBody.balance).toEqual({
+      amountPaidMinor: 300000,
+      remainingMinor: 0,
+      status: 'PAID',
+    });
+    await agent
+      .post(
+        `/api/v1/invoices/${createdBody.id}/payments/${winningBody.payment.id}/reverse`,
+      )
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ reason: 'Bank transfer was returned' })
+      .expect(201)
+      .expect((response) =>
+        expect(
+          (response.body as unknown as PaymentResultResponse).balance,
+        ).toEqual({
+          amountPaidMinor: 120000,
+          remainingMinor: 180000,
+          status: 'PARTIALLY_PAID',
+        }),
+      );
+    await agent
+      .post(
+        `/api/v1/invoices/${createdBody.id}/payments/${winningBody.payment.id}/reverse`,
+      )
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ reason: 'Duplicate reversal attempt' })
+      .expect(409);
+    await agent
+      .post(
+        `/api/v1/invoices/${createdBody.id}/payments/${firstPaymentBody.payment.id}/reverse`,
+      )
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ reason: 'Payment was recorded in error' })
+      .expect(201)
+      .expect((response) =>
+        expect(
+          (response.body as unknown as PaymentResultResponse).balance.status,
+        ).toBe('SENT'),
+      );
+    await agent
       .post(`/api/v1/invoices/${createdBody.id}/void`)
       .set('x-company-id', primaryCompanyId)
       .set('x-csrf-token', csrfToken)
@@ -511,6 +619,10 @@ describe('Ledgerly API (e2e)', () => {
   });
 
   afterAll(async () => {
+    if (createdInvoiceIds.length)
+      await prisma.payment.deleteMany({
+        where: { invoiceId: { in: createdInvoiceIds } },
+      });
     if (createdInvoiceIds.length)
       await prisma.invoice.deleteMany({
         where: { id: { in: createdInvoiceIds } },

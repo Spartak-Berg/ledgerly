@@ -8,13 +8,19 @@ describe('company permission matrix', () => {
     );
   });
 
-  it('limits accountants to customer visibility', () => {
+  it('allows accountants to work with invoices and payments but not customer records', () => {
     expect(hasPermission('ACCOUNTANT', CompanyPermission.VIEW_CUSTOMERS)).toBe(
       true,
     );
     expect(
       hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_CUSTOMERS),
     ).toBe(false);
+    expect(
+      hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_INVOICES),
+    ).toBe(true);
+    expect(
+      hasPermission('ACCOUNTANT', CompanyPermission.MANAGE_PAYMENTS),
+    ).toBe(true);
   });
 
   it('does not grant employees customer or company management', () => {

@@ -1,9 +1,10 @@
 import { InvoiceStatus } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -58,4 +59,12 @@ export class UpdateInvoiceDraftDto extends InvoiceDraftDto {
 export class ListInvoicesQueryDto {
   @IsOptional() @IsString() @MaxLength(200) search?: string;
   @IsOptional() @IsEnum(InvoiceStatus) status?: InvoiceStatus;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) dateFrom?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) dateTo?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) minAmountMinor?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) maxAmountMinor?: number;
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  outstanding?: boolean;
 }

@@ -14,7 +14,7 @@ describe('invoice status policy', () => {
       assertInvoiceTransition(InvoiceStatus.ISSUED, InvoiceStatus.VOID),
     ).not.toThrow();
     expect(() =>
-      assertInvoiceTransition(InvoiceStatus.ISSUED, InvoiceStatus.PAID),
+      assertInvoiceTransition(InvoiceStatus.ISSUED, InvoiceStatus.DRAFT),
     ).toThrow(ConflictException);
   });
 
