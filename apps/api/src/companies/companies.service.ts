@@ -31,6 +31,9 @@ const companySelect = {
       defaultPaymentDays: true,
       defaultVatRate: true,
       financialYearStartMonth: true,
+      invoicePrefix: true,
+      invoiceNumberPadding: true,
+      nextInvoiceNumber: true,
     },
   },
 } satisfies Prisma.CompanySelect;
@@ -90,6 +93,8 @@ export class CompaniesService {
       defaultPaymentDays,
       defaultVatRate,
       financialYearStartMonth,
+      invoicePrefix,
+      invoiceNumberPadding,
       ...companyData
     } = dto;
     const settingsData = {
@@ -98,6 +103,8 @@ export class CompaniesService {
       ...(financialYearStartMonth === undefined
         ? {}
         : { financialYearStartMonth }),
+      ...(invoicePrefix === undefined ? {} : { invoicePrefix }),
+      ...(invoiceNumberPadding === undefined ? {} : { invoiceNumberPadding }),
     };
     const company = await this.prisma.$transaction(async (transaction) => {
       await transaction.company.update({

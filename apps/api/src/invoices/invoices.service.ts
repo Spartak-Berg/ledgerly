@@ -12,6 +12,12 @@ import {
   UpdateInvoiceDraftDto,
 } from './dto/invoice-draft.dto';
 import { calculateInvoice } from './invoice-calculator';
+import { IssueInvoiceDto, VoidInvoiceDto } from './dto/invoice-action.dto';
+import { InvoicePdfService } from './invoice-pdf.service';
+import {
+  assertInvoiceTransition,
+  effectiveInvoiceStatus,
+} from './invoice-status.policy';
 
 const date = (value: string) => new Date(`${value}T00:00:00.000Z`);
 const text = (value?: string | null) => value?.trim() || null;
@@ -65,15 +71,40 @@ const detailView = <
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly invoicePdf: InvoicePdfService,
+  ) {}
 
   async list(companyId: string, query: ListInvoicesQueryDto) {
     const search = query.search?.trim();
-    return this.prisma.invoice.findMany({
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const statusWhere: Prisma.InvoiceWhereInput =
+      query.status === InvoiceStatus.OVERDUE
+        ? {
+            OR: [
+              { status: InvoiceStatus.OVERDUE },
+              {
+                status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.SENT] },
+                dueDate: { lt: today },
+              },
+            ],
+          }
+        : query.status
+          ? {
+              status: query.status,
+              ...(query.status === InvoiceStatus.ISSUED ||
+              query.status === InvoiceStatus.SENT
+                ? { dueDate: { gte: today } }
+                : {}),
+            }
+          : {};
+    const invoices = await this.prisma.invoice.findMany({
       where: {
         companyId,
         archivedAt: null,
-        ...(query.status ? { status: query.status } : {}),
+        ...statusWhere,
         ...(search
           ? {
               OR: [
@@ -93,6 +124,10 @@ export class InvoicesService {
       },
       orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
     });
+    return invoices.map((invoice) => ({
+      ...invoice,
+      status: effectiveInvoiceStatus(invoice.status, invoice.dueDate),
+    }));
   }
 
   async get(companyId: string, id: string) {
@@ -101,7 +136,10 @@ export class InvoicesService {
       include: includeItems,
     });
     if (!invoice) throw new NotFoundException('Invoice was not found');
-    return detailView(invoice);
+    return detailView({
+      ...invoice,
+      status: effectiveInvoiceStatus(invoice.status, invoice.dueDate),
+    });
   }
 
   async create(companyId: string, dto: InvoiceDraftDto) {
@@ -237,6 +275,115 @@ export class InvoicesService {
     });
   }
 
+  async issue(companyId: string, id: string, dto: IssueInvoiceDto) {
+    const issuedAt = new Date();
+    const invoice = await this.prisma.$transaction(async (transaction) => {
+      const current = await transaction.invoice.findFirst({
+        where: { id, companyId, archivedAt: null },
+        select: { status: true, version: true },
+      });
+      if (!current) throw new NotFoundException('Invoice was not found');
+      assertInvoiceTransition(current.status, InvoiceStatus.ISSUED);
+      if (current.version !== dto.version) {
+        throw new ConflictException(
+          'This draft changed in another session. Reload it before issuing.',
+        );
+      }
+      const settings = await transaction.companySettings.update({
+        where: { companyId },
+        data: { nextInvoiceNumber: { increment: 1 } },
+        select: {
+          invoicePrefix: true,
+          invoiceNumberPadding: true,
+          nextInvoiceNumber: true,
+        },
+      });
+      const sequence = settings.nextInvoiceNumber - 1;
+      const number = `${settings.invoicePrefix}-${String(sequence).padStart(
+        settings.invoiceNumberPadding,
+        '0',
+      )}`;
+      const result = await transaction.invoice.updateMany({
+        where: {
+          id,
+          companyId,
+          status: InvoiceStatus.DRAFT,
+          archivedAt: null,
+          version: dto.version,
+        },
+        data: {
+          number,
+          status: InvoiceStatus.ISSUED,
+          issuedAt,
+          version: { increment: 1 },
+        },
+      });
+      if (result.count !== 1) {
+        throw new ConflictException('Invoice could not be issued');
+      }
+      return transaction.invoice.findUniqueOrThrow({
+        where: { id },
+        include: includeItems,
+      });
+    });
+    return detailView(invoice);
+  }
+
+  async markSent(companyId: string, id: string) {
+    const current = await this.findLifecycleInvoice(companyId, id);
+    assertInvoiceTransition(current.status, InvoiceStatus.SENT);
+    const result = await this.prisma.invoice.updateMany({
+      where: { id, companyId, status: current.status, archivedAt: null },
+      data: {
+        status: InvoiceStatus.SENT,
+        sentAt: new Date(),
+        version: { increment: 1 },
+      },
+    });
+    if (result.count !== 1)
+      throw new ConflictException('Invoice status changed');
+    const invoice = await this.prisma.invoice.findUniqueOrThrow({
+      where: { id },
+      include: includeItems,
+    });
+    return detailView(invoice);
+  }
+
+  async void(companyId: string, id: string, dto: VoidInvoiceDto) {
+    const current = await this.findLifecycleInvoice(companyId, id);
+    assertInvoiceTransition(current.status, InvoiceStatus.VOID);
+    const result = await this.prisma.invoice.updateMany({
+      where: { id, companyId, status: current.status, archivedAt: null },
+      data: {
+        status: InvoiceStatus.VOID,
+        voidedAt: new Date(),
+        voidReason: dto.reason.trim(),
+        version: { increment: 1 },
+      },
+    });
+    if (result.count !== 1)
+      throw new ConflictException('Invoice status changed');
+    const invoice = await this.prisma.invoice.findUniqueOrThrow({
+      where: { id },
+      include: includeItems,
+    });
+    return detailView(invoice);
+  }
+
+  async pdf(companyId: string, id: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id, companyId, archivedAt: null },
+      include: includeItems,
+    });
+    if (!invoice) throw new NotFoundException('Invoice was not found');
+    if (invoice.status === InvoiceStatus.DRAFT || !invoice.number) {
+      throw new ConflictException(
+        'Issue the invoice before downloading its PDF',
+      );
+    }
+    return this.invoicePdf.render(invoice);
+  }
+
   async archive(companyId: string, id: string) {
     const result = await this.prisma.invoice.updateMany({
       where: { id, companyId, status: InvoiceStatus.DRAFT, archivedAt: null },
@@ -257,6 +404,15 @@ export class InvoicesService {
     if (date(dto.dueDate) < date(dto.issueDate)) {
       throw new BadRequestException('Due date cannot be before issue date');
     }
+  }
+
+  private async findLifecycleInvoice(companyId: string, id: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id, companyId, archivedAt: null },
+      select: { id: true, status: true },
+    });
+    if (!invoice) throw new NotFoundException('Invoice was not found');
+    return invoice;
   }
 
   private async validateRelations(companyId: string, dto: InvoiceDraftDto) {

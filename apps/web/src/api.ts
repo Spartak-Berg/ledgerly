@@ -19,9 +19,19 @@ interface ApiCustomer {
   contactName: string | null;
   email: string | null;
   phone: string | null;
-  billingAddressLine1: string | null; billingAddressLine2: string | null; billingPostalCode: string | null; billingCity: string | null;
-  postalAddressLine1: string | null; postalAddressLine2: string | null; postalPostalCode: string | null; postalCity: string | null;
-  countryCode: string; vatNumber: string | null; defaultCurrency: string; defaultPaymentDays: number; notes: string | null;
+  billingAddressLine1: string | null;
+  billingAddressLine2: string | null;
+  billingPostalCode: string | null;
+  billingCity: string | null;
+  postalAddressLine1: string | null;
+  postalAddressLine2: string | null;
+  postalPostalCode: string | null;
+  postalCity: string | null;
+  countryCode: string;
+  vatNumber: string | null;
+  defaultCurrency: string;
+  defaultPaymentDays: number;
+  notes: string | null;
   status: ApiCustomerStatus;
   createdAt: string;
   updatedAt: string;
@@ -34,9 +44,19 @@ export interface CustomerInput {
   contactName?: string;
   email?: string;
   phone?: string;
-  billingAddressLine1?: string; billingAddressLine2?: string; billingPostalCode?: string; billingCity?: string;
-  postalAddressLine1?: string; postalAddressLine2?: string; postalPostalCode?: string; postalCity?: string;
-  countryCode: string; vatNumber?: string; defaultCurrency: string; defaultPaymentDays: number; notes?: string;
+  billingAddressLine1?: string;
+  billingAddressLine2?: string;
+  billingPostalCode?: string;
+  billingCity?: string;
+  postalAddressLine1?: string;
+  postalAddressLine2?: string;
+  postalPostalCode?: string;
+  postalCity?: string;
+  countryCode: string;
+  vatNumber?: string;
+  defaultCurrency: string;
+  defaultPaymentDays: number;
+  notes?: string;
   status: ApiCustomerStatus;
 }
 
@@ -48,11 +68,22 @@ const toCustomer = (customer: ApiCustomer): Customer => ({
   contact: customer.contactName ?? '',
   email: customer.email ?? '',
   phone: customer.phone ?? '',
-  billingAddressLine1: customer.billingAddressLine1 ?? '', billingAddressLine2: customer.billingAddressLine2 ?? '', billingPostalCode: customer.billingPostalCode ?? '', billingCity: customer.billingCity ?? '',
-  postalAddressLine1: customer.postalAddressLine1 ?? '', postalAddressLine2: customer.postalAddressLine2 ?? '', postalPostalCode: customer.postalPostalCode ?? '', postalCity: customer.postalCity ?? '',
-  countryCode: customer.countryCode, vatNumber: customer.vatNumber ?? '', defaultCurrency: customer.defaultCurrency, defaultPaymentDays: customer.defaultPaymentDays, notes: customer.notes ?? '',
+  billingAddressLine1: customer.billingAddressLine1 ?? '',
+  billingAddressLine2: customer.billingAddressLine2 ?? '',
+  billingPostalCode: customer.billingPostalCode ?? '',
+  billingCity: customer.billingCity ?? '',
+  postalAddressLine1: customer.postalAddressLine1 ?? '',
+  postalAddressLine2: customer.postalAddressLine2 ?? '',
+  postalPostalCode: customer.postalPostalCode ?? '',
+  postalCity: customer.postalCity ?? '',
+  countryCode: customer.countryCode,
+  vatNumber: customer.vatNumber ?? '',
+  defaultCurrency: customer.defaultCurrency,
+  defaultPaymentDays: customer.defaultPaymentDays,
+  notes: customer.notes ?? '',
   outstanding: 0,
-  status: `${customer.status[0]}${customer.status.slice(1).toLowerCase()}` as CustomerStatus,
+  status:
+    `${customer.status[0]}${customer.status.slice(1).toLowerCase()}` as CustomerStatus,
 });
 
 const cleanInput = (input: CustomerInput) => ({
@@ -63,9 +94,19 @@ const cleanInput = (input: CustomerInput) => ({
   email: input.email?.trim() || null,
   phone: input.phone?.trim() || null,
   organisationNumber: input.organisationNumber?.trim() || null,
-  billingAddressLine1: input.billingAddressLine1?.trim() || null, billingAddressLine2: input.billingAddressLine2?.trim() || null, billingPostalCode: input.billingPostalCode?.trim() || null, billingCity: input.billingCity?.trim() || null,
-  postalAddressLine1: input.postalAddressLine1?.trim() || null, postalAddressLine2: input.postalAddressLine2?.trim() || null, postalPostalCode: input.postalPostalCode?.trim() || null, postalCity: input.postalCity?.trim() || null,
-  countryCode: input.countryCode, vatNumber: input.vatNumber?.trim() || null, defaultCurrency: input.defaultCurrency, defaultPaymentDays: input.defaultPaymentDays, notes: input.notes?.trim() || null,
+  billingAddressLine1: input.billingAddressLine1?.trim() || null,
+  billingAddressLine2: input.billingAddressLine2?.trim() || null,
+  billingPostalCode: input.billingPostalCode?.trim() || null,
+  billingCity: input.billingCity?.trim() || null,
+  postalAddressLine1: input.postalAddressLine1?.trim() || null,
+  postalAddressLine2: input.postalAddressLine2?.trim() || null,
+  postalPostalCode: input.postalPostalCode?.trim() || null,
+  postalCity: input.postalCity?.trim() || null,
+  countryCode: input.countryCode,
+  vatNumber: input.vatNumber?.trim() || null,
+  defaultCurrency: input.defaultCurrency,
+  defaultPaymentDays: input.defaultPaymentDays,
+  notes: input.notes?.trim() || null,
 });
 
 export class ApiError extends Error {
@@ -103,7 +144,10 @@ async function rawRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const message = Array.isArray(body?.message)
       ? body.message.join(', ')
       : body?.message;
-    throw new ApiError(message ?? `Request failed with status ${response.status}`, response.status);
+    throw new ApiError(
+      message ?? `Request failed with status ${response.status}`,
+      response.status,
+    );
   }
 
   if (response.status === 204) return undefined as T;
@@ -116,7 +160,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     return await rawRequest<T>(path, init);
   } catch (error) {
-    const cannotRefresh = ['/auth/login', '/auth/refresh', '/auth/register'].includes(path);
+    const cannotRefresh = [
+      '/auth/login',
+      '/auth/refresh',
+      '/auth/register',
+    ].includes(path);
     if (
       !(error instanceof ApiError) ||
       error.status !== 401 ||
@@ -126,11 +174,53 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw error;
     }
 
-    refreshRequest ??= rawRequest('/auth/refresh', { method: 'POST' }).finally(() => {
-      refreshRequest = undefined;
-    });
+    refreshRequest ??= rawRequest('/auth/refresh', { method: 'POST' }).finally(
+      () => {
+        refreshRequest = undefined;
+      },
+    );
     await refreshRequest;
     return rawRequest<T>(path, init);
+  }
+}
+
+const rawDownload = async (path: string) => {
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
+    headers: currentCompanyId ? { 'x-company-id': currentCompanyId } : {},
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
+    const message = Array.isArray(body?.message)
+      ? body.message.join(', ')
+      : body?.message;
+    throw new ApiError(
+      message ?? `Request failed with status ${response.status}`,
+      response.status,
+    );
+  }
+  const disposition = response.headers.get('content-disposition') ?? '';
+  return {
+    blob: await response.blob(),
+    filename: disposition.match(/filename="([^"]+)"/)?.[1] ?? 'invoice.pdf',
+  };
+};
+
+export async function download(path: string) {
+  try {
+    return await rawDownload(path);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401 || !csrfToken())
+      throw error;
+    refreshRequest ??= rawRequest('/auth/refresh', { method: 'POST' }).finally(
+      () => {
+        refreshRequest = undefined;
+      },
+    );
+    await refreshRequest;
+    return rawDownload(path);
   }
 }
 
@@ -141,7 +231,13 @@ export const customerApi = {
   },
 
   async search(params: URLSearchParams) {
-    const result = await request<{ items: ApiCustomer[]; page: number; pageSize: number; total: number; totalPages: number }>(`/customers?${params}`);
+    const result = await request<{
+      items: ApiCustomer[];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    }>(`/customers?${params}`);
     return { ...result, items: result.items.map(toCustomer) };
   },
 

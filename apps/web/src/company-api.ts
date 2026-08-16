@@ -29,6 +29,9 @@ export interface CompanyDetail extends CompanySummary {
     defaultPaymentDays: number;
     defaultVatRate: number;
     financialYearStartMonth: number;
+    invoicePrefix: string;
+    invoiceNumberPadding: number;
+    nextInvoiceNumber: number;
   };
 }
 
@@ -36,7 +39,7 @@ export type UpdateCompanyInput = Omit<
   CompanyDetail,
   'id' | 'role' | 'settings'
 > &
-  CompanyDetail['settings'];
+  Omit<CompanyDetail['settings'], 'nextInvoiceNumber'>;
 
 export const companyApi = {
   list: () => request<CompanySummary[]>('/companies'),

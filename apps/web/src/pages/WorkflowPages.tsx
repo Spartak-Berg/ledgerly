@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from 'react';
 import {
   Link,
   useBlocker,
@@ -57,7 +63,6 @@ import { ApiError, customerApi } from '../api';
 import { companyApi, type CompanyDetail } from '../company-api';
 import { useAuth } from '../useAuth';
 import { cashFlow } from '../data';
-import { downloadInvoicePdf } from '../invoicePdf';
 import { invoiceTotals, money, type Customer, type LineItem } from '../lib';
 import { invoicesApi, type InvoiceDraftInput } from '../invoices-api';
 import { productsApi, type Product } from '../products-api';
@@ -94,6 +99,7 @@ const addDays = (value: Date, days: number) => {
 
 export function CreateInvoice() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [customerList, setCustomerList] = useState<Customer[]>([]);
@@ -109,7 +115,6 @@ export function CreateInvoice() {
     control,
     watch,
     handleSubmit,
-    setError,
     setValue,
     reset,
     formState: { errors, isDirty },
@@ -147,11 +152,14 @@ export function CreateInvoice() {
     customerApi
       .list()
       .then((result) => active && setCustomerList(result))
-      .catch((reason: unknown) =>
-        active &&
-        setCustomersError(
-          reason instanceof Error ? reason.message : 'Could not load customers',
-        ),
+      .catch(
+        (reason: unknown) =>
+          active &&
+          setCustomersError(
+            reason instanceof Error
+              ? reason.message
+              : 'Could not load customers',
+          ),
       )
       .finally(() => active && setCustomersLoading(false));
     return () => {
@@ -162,7 +170,10 @@ export function CreateInvoice() {
     let active = true;
     productsApi
       .list()
-      .then((products) => active && setProductList(products.filter((item) => item.active)))
+      .then(
+        (products) =>
+          active && setProductList(products.filter((item) => item.active)),
+      )
       .catch(() => active && setProductList([]));
     return () => {
       active = false;
@@ -199,9 +210,12 @@ export function CreateInvoice() {
           })),
         });
       })
-      .catch((reason: unknown) =>
-        active &&
-        setSaveError(reason instanceof Error ? reason.message : 'Could not load draft'),
+      .catch(
+        (reason: unknown) =>
+          active &&
+          setSaveError(
+            reason instanceof Error ? reason.message : 'Could not load draft',
+          ),
       );
     return () => {
       active = false;
@@ -221,14 +235,6 @@ export function CreateInvoice() {
   const values = watch();
   const totals = invoiceTotals(values.items as LineItem[]);
   const customer = customerList.find((c) => c.id === values.customer);
-  const downloadPdf = async (data: InvoiceForm) => {
-    const selectedCustomer = customerList.find((item) => item.id === data.customer);
-    if (!selectedCustomer) {
-      setError('customer', { message: 'Select an available customer' });
-      return;
-    }
-    await downloadInvoicePdf({ ...data, customer: selectedCustomer });
-  };
   const save = async (data: InvoiceForm) => {
     setSaving(true);
     setSaveError('');
@@ -257,7 +263,9 @@ export function CreateInvoice() {
       allowNavigation.current = true;
       navigate('/invoices');
     } catch (reason) {
-      setSaveError(reason instanceof Error ? reason.message : 'Could not save draft');
+      setSaveError(
+        reason instanceof Error ? reason.message : 'Could not save draft',
+      );
     } finally {
       setSaving(false);
     }
@@ -283,42 +291,42 @@ export function CreateInvoice() {
                 <Field label="Customer">
                   <Select {...register('customer')} disabled={customersLoading}>
                     <option value="">
-                      {customersLoading ? 'Loading customers…' : 'Select customer'}
+                      {customersLoading
+                        ? 'Loading customers…'
+                        : 'Select customer'}
                     </option>
-                    {customerList.filter((x) => x.status !== 'Archived').map((x) => (
-                      <option
-                        key={x.id}
-                        value={x.id}
-                      >
-                        {x.company}
-                      </option>
-                    ))}
+                    {customerList
+                      .filter((x) => x.status !== 'Archived')
+                      .map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.company}
+                        </option>
+                      ))}
                   </Select>
                   {errors.customer && (
                     <small className="error">{errors.customer.message}</small>
                   )}
-                  {customersError && <small className="error">{customersError}</small>}
-                  {!customersLoading && !customersError && customerList.length === 0 && (
-                    <small>
-                      No customers yet. <Link to="/customers?new=1">Add a customer</Link>
-                    </small>
+                  {customersError && (
+                    <small className="error">{customersError}</small>
                   )}
+                  {!customersLoading &&
+                    !customersError &&
+                    customerList.length === 0 && (
+                      <small>
+                        No customers yet.{' '}
+                        <Link to="/customers?new=1">Add a customer</Link>
+                      </small>
+                    )}
                 </Field>
                 <Field label="Invoice number">
                   <Input {...register('number')} disabled />
                   <small>Assigned when the invoice is issued.</small>
                 </Field>
                 <Field label="Issue date">
-                  <Input
-                    type="date"
-                    {...register('issueDate')}
-                  />
+                  <Input type="date" {...register('issueDate')} />
                 </Field>
                 <Field label="Due date">
-                  <Input
-                    type="date"
-                    {...register('dueDate')}
-                  />
+                  <Input type="date" {...register('dueDate')} />
                 </Field>
                 <Field label="Currency">
                   <Select {...register('currency')}>
@@ -346,10 +354,7 @@ export function CreateInvoice() {
                   <span />
                 </div>
                 {fields.map((field, index) => (
-                  <div
-                    className="line-item"
-                    key={field.id}
-                  >
+                  <div className="line-item" key={field.id}>
                     <div className="line-description">
                       <Select
                         aria-label={`Item ${index + 1} product or service`}
@@ -359,16 +364,22 @@ export function CreateInvoice() {
                           setValue(`items.${index}.productId`, productId, {
                             shouldDirty: true,
                           });
-                          const product = productList.find((item) => item.id === productId);
+                          const product = productList.find(
+                            (item) => item.id === productId,
+                          );
                           if (!product) return;
                           setValue(
                             `items.${index}.description`,
                             product.description || product.name,
                             { shouldDirty: true },
                           );
-                          setValue(`items.${index}.quantity`, product.defaultQuantity, {
-                            shouldDirty: true,
-                          });
+                          setValue(
+                            `items.${index}.quantity`,
+                            product.defaultQuantity,
+                            {
+                              shouldDirty: true,
+                            },
+                          );
                           setValue(`items.${index}.unit`, product.unit, {
                             shouldDirty: true,
                           });
@@ -401,7 +412,9 @@ export function CreateInvoice() {
                         aria-label="Quantity"
                         type="number"
                         step="0.0001"
-                        {...register(`items.${index}.quantity`, { valueAsNumber: true })}
+                        {...register(`items.${index}.quantity`, {
+                          valueAsNumber: true,
+                        })}
                       />
                       <Input
                         aria-label="Unit"
@@ -411,7 +424,9 @@ export function CreateInvoice() {
                     <Input
                       aria-label="Unit price"
                       type="number"
-                      {...register(`items.${index}.unitPrice`, { valueAsNumber: true })}
+                      {...register(`items.${index}.unitPrice`, {
+                        valueAsNumber: true,
+                      })}
                     />
                     <Input
                       aria-label="VAT rate"
@@ -419,7 +434,9 @@ export function CreateInvoice() {
                       min="0"
                       max="100"
                       step="0.01"
-                      {...register(`items.${index}.vatRate`, { valueAsNumber: true })}
+                      {...register(`items.${index}.vatRate`, {
+                        valueAsNumber: true,
+                      })}
                     />
                     <b>
                       {money(
@@ -475,16 +492,10 @@ export function CreateInvoice() {
               <h3>Notes & payment</h3>
               <div className="form-grid">
                 <Field label="Notes">
-                  <Textarea
-                    rows={3}
-                    {...register('notes')}
-                  />
+                  <Textarea rows={3} {...register('notes')} />
                 </Field>
                 <Field label="Payment terms">
-                  <Textarea
-                    rows={3}
-                    {...register('terms')}
-                  />
+                  <Textarea rows={3} {...register('terms')} />
                 </Field>
               </div>
             </Card>
@@ -492,17 +503,11 @@ export function CreateInvoice() {
           <aside className="preview-column">
             <div className="preview-label">
               <span>Live preview</span>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleSubmit(downloadPdf)}
-                disabled={customersLoading || customerList.length === 0}
-              >
-                <Download size={16} /> PDF
-              </Button>
+              <small>Canonical PDF available after issuance</small>
             </div>
             <InvoicePreview
               customer={customer?.company}
+              companyName={profile?.company.name ?? 'Your company'}
               number={values.number}
               issueDate={values.issueDate}
               dueDate={values.dueDate}
@@ -518,19 +523,22 @@ export function CreateInvoice() {
           </div>
         )}
         <div className="sticky-actions">
-          <Button
-            type="submit"
-            disabled={saving}
-          >
+          <Button type="submit" disabled={saving}>
             <Save size={16} /> {saving ? 'Saving…' : 'Save draft'}
           </Button>
-          <Button
-            type="button"
-            disabled
-            title="Invoice issuing is added in the next implementation chunk"
-          >
-            <Send size={16} /> Issue & send
-          </Button>
+          {id && !isDirty ? (
+            <Link className="button button-primary" to={`/invoices/${id}`}>
+              <Send size={16} /> Review & issue
+            </Link>
+          ) : (
+            <Button
+              type="button"
+              disabled
+              title="Save the draft before issuing"
+            >
+              <Send size={16} /> Save before issuing
+            </Button>
+          )}
         </div>
       </form>
       {navigationBlocker.state === 'blocked' && (
@@ -548,6 +556,7 @@ export function CreateInvoice() {
 
 function InvoicePreview({
   customer,
+  companyName,
   number,
   issueDate,
   dueDate,
@@ -556,6 +565,7 @@ function InvoicePreview({
   totals,
 }: {
   customer?: string;
+  companyName: string;
   number: string;
   issueDate: string;
   dueDate: string;
@@ -576,16 +586,24 @@ function InvoicePreview({
         </div>
       </div>
       <div className="paper-dates">
-        <span><small>ISSUED</small>{issueDate}</span>
-        <span><small>DUE</small>{dueDate}</span>
-        <span><small>CURRENCY</small>{currency}</span>
+        <span>
+          <small>ISSUED</small>
+          {issueDate}
+        </span>
+        <span>
+          <small>DUE</small>
+          {dueDate}
+        </span>
+        <span>
+          <small>CURRENCY</small>
+          {currency}
+        </span>
       </div>
       <div className="paper-address">
         <div>
           <small>FROM</small>
-          <b>Nordic Studio AS</b>
-          <span>Storgata 18, 0155 Oslo</span>
-          <span>Org. no. 923 456 781</span>
+          <b>{companyName}</b>
+          <span>Company details are added from settings</span>
         </div>
         <div>
           <small>BILL TO</small>
@@ -666,10 +684,7 @@ export function UploadReceipt() {
           <CloudUpload size={36} />
           <h3>Drop your receipt here</h3>
           <p>or choose a file from your device</p>
-          <Button
-            type="button"
-            onClick={() => input.current?.click()}
-          >
+          <Button type="button" onClick={() => input.current?.click()}>
             <Upload size={16} /> Choose file
           </Button>
           <input
@@ -714,22 +729,13 @@ export function UploadReceipt() {
                   <Input defaultValue="IKEA Forus" />
                 </Field>
                 <Field label="Date">
-                  <Input
-                    type="date"
-                    defaultValue="2026-07-21"
-                  />
+                  <Input type="date" defaultValue="2026-07-21" />
                 </Field>
                 <Field label="Total">
-                  <Input
-                    type="number"
-                    defaultValue="6240"
-                  />
+                  <Input type="number" defaultValue="6240" />
                 </Field>
                 <Field label="VAT">
-                  <Input
-                    type="number"
-                    defaultValue="1248"
-                  />
+                  <Input type="number" defaultValue="1248" />
                 </Field>
                 <Field label="Category">
                   <Select defaultValue="Office">
@@ -756,16 +762,10 @@ export function UploadReceipt() {
                 </Field>
               </div>
               <div className="form-actions">
-                <Button
-                  variant="secondary"
-                  onClick={() => setFile(null)}
-                >
+                <Button variant="secondary" onClick={() => setFile(null)}>
                   Replace file
                 </Button>
-                <Link
-                  to="/expenses"
-                  className="button button-primary"
-                >
+                <Link to="/expenses" className="button button-primary">
                   <Save size={16} /> Save expense
                 </Link>
               </div>
@@ -785,11 +785,14 @@ export function Reports() {
     customerApi
       .list()
       .then((result) => active && setReportCustomers(result))
-      .catch((reason: unknown) =>
-        active &&
-        setReportCustomersError(
-          reason instanceof Error ? reason.message : 'Could not load customers',
-        ),
+      .catch(
+        (reason: unknown) =>
+          active &&
+          setReportCustomersError(
+            reason instanceof Error
+              ? reason.message
+              : 'Could not load customers',
+          ),
       );
     return () => {
       active = false;
@@ -855,24 +858,11 @@ export function Reports() {
             </div>
           </div>
           <div className="chart">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cashFlow}>
-                <CartesianGrid
-                  vertical={false}
-                  strokeDasharray="3 3"
-                />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Area
                   dataKey="income"
@@ -907,10 +897,7 @@ export function Reports() {
                   outerRadius={80}
                 >
                   {categories.map((x) => (
-                    <Cell
-                      key={x.name}
-                      fill={x.color}
-                    />
+                    <Cell key={x.name} fill={x.color} />
                   ))}
                 </Pie>
               </PieChart>
@@ -942,21 +929,10 @@ export function Reports() {
                 }))}
               >
                 <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} />
                 <Tooltip />
-                <Bar
-                  dataKey="profit"
-                  fill="#3b73ed"
-                  radius={[5, 5, 0, 0]}
-                />
+                <Bar dataKey="profit" fill="#3b73ed" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -971,14 +947,22 @@ export function Reports() {
           {reportCustomers.slice(0, 5).map((x, i) => (
             <div key={x.id}>
               <span>{i + 1}</span>
-              <Link to={`/customers/${x.id}`}><b>{x.company}</b></Link>
+              <Link to={`/customers/${x.id}`}>
+                <b>{x.company}</b>
+              </Link>
               <StatusBadge>{x.status}</StatusBadge>
             </div>
           ))}
           {!reportCustomersError && reportCustomers.length === 0 && (
-            <div><span>—</span><b>No customers yet</b><Link to="/customers?new=1">Add one</Link></div>
+            <div>
+              <span>—</span>
+              <b>No customers yet</b>
+              <Link to="/customers?new=1">Add one</Link>
+            </div>
           )}
-          {reportCustomersError && <p className="api-error">{reportCustomersError}</p>}
+          {reportCustomersError && (
+            <p className="api-error">{reportCustomersError}</p>
+          )}
         </Card>
       </div>
     </div>
@@ -1053,13 +1037,14 @@ function CompanySettings() {
     companyApi
       .get(companyId)
       .then((result) => active && setCompany(result))
-      .catch((reason: unknown) =>
-        active &&
-        setError(
-          reason instanceof ApiError
-            ? reason.message
-            : 'Could not load company settings',
-        ),
+      .catch(
+        (reason: unknown) =>
+          active &&
+          setError(
+            reason instanceof ApiError
+              ? reason.message
+              : 'Could not load company settings',
+          ),
       )
       .finally(() => active && setLoading(false));
     return () => {
@@ -1077,14 +1062,27 @@ function CompanySettings() {
   }, [dirty]);
 
   if (loading) {
-    return <Card className="settings-card"><p className="settings-state">Loading company settings…</p></Card>;
+    return (
+      <Card className="settings-card">
+        <p className="settings-state">Loading company settings…</p>
+      </Card>
+    );
   }
   if (!company || !profile) {
-    return <Card className="settings-card"><p className="api-error">{error || 'Company settings are unavailable.'}</p></Card>;
+    return (
+      <Card className="settings-card">
+        <p className="api-error">
+          {error || 'Company settings are unavailable.'}
+        </p>
+      </Card>
+    );
   }
 
   const canEdit = ['OWNER', 'ADMIN'].includes(profile.company.role);
-  const update = <K extends keyof CompanyDetail>(key: K, value: CompanyDetail[K]) => {
+  const update = <K extends keyof CompanyDetail>(
+    key: K,
+    value: CompanyDetail[K],
+  ) => {
     setCompany((current) => (current ? { ...current, [key]: value } : current));
     setDirty(true);
     setSaved('');
@@ -1116,13 +1114,19 @@ function CompanySettings() {
         defaultPaymentDays: company.settings.defaultPaymentDays,
         defaultVatRate: company.settings.defaultVatRate,
         financialYearStartMonth: company.settings.financialYearStartMonth,
+        invoicePrefix: company.settings.invoicePrefix,
+        invoiceNumberPadding: company.settings.invoiceNumberPadding,
       });
       setCompany(updated);
       setDirty(false);
       setSaved('Company settings saved.');
       await refreshProfile();
     } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : 'Could not save company settings');
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : 'Could not save company settings',
+      );
     } finally {
       setSaving(false);
     }
@@ -1137,90 +1141,288 @@ function CompanySettings() {
         </div>
       </div>
       <div className="company-logo-edit">
-        <span>{company.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
+        <span>
+          {company.name
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((part) => part[0])
+            .join('')
+            .toUpperCase()}
+        </span>
         <div>
           <b>{company.name}</b>
-          <small>Logo upload will be enabled with secure document storage.</small>
+          <small>
+            Logo upload will be enabled with secure document storage.
+          </small>
         </div>
       </div>
       <form onSubmit={(event) => void submit(event)}>
-      <div className="form-grid">
-        <Field label="Legal company name">
-          <Input value={company.name} onChange={(event) => update('name', event.target.value)} minLength={2} maxLength={200} disabled={!canEdit} required />
-        </Field>
-        <Field label="Organisation number">
-          <Input value={company.organisationNumber ?? ''} onChange={(event) => update('organisationNumber', event.target.value)} maxLength={50} disabled={!canEdit} />
-        </Field>
-        <Field label="Email">
-          <Input type="email" value={company.email ?? ''} onChange={(event) => update('email', event.target.value)} maxLength={320} disabled={!canEdit} />
-        </Field>
-        <Field label="Phone">
-          <Input value={company.phone ?? ''} onChange={(event) => update('phone', event.target.value)} maxLength={50} disabled={!canEdit} />
-        </Field>
-        <Field label="Website">
-          <Input type="url" placeholder="https://example.com" value={company.website ?? ''} onChange={(event) => update('website', event.target.value)} disabled={!canEdit} />
-        </Field>
-        <Field label="Address line 1">
-          <Input value={company.addressLine1 ?? ''} onChange={(event) => update('addressLine1', event.target.value)} maxLength={200} disabled={!canEdit} />
-        </Field>
-        <Field label="Address line 2">
-          <Input value={company.addressLine2 ?? ''} onChange={(event) => update('addressLine2', event.target.value)} maxLength={200} disabled={!canEdit} />
-        </Field>
-        <Field label="Postal code">
-          <Input value={company.postalCode ?? ''} onChange={(event) => update('postalCode', event.target.value)} maxLength={20} disabled={!canEdit} />
-        </Field>
-        <Field label="City">
-          <Input value={company.city ?? ''} onChange={(event) => update('city', event.target.value)} maxLength={120} disabled={!canEdit} />
-        </Field>
-        <Field label="Country">
-          <Select value={company.countryCode} onChange={(event) => update('countryCode', event.target.value)} disabled={!canEdit}>
-            <option value="NO">Norway</option>
-            <option value="SE">Sweden</option>
-            <option value="DK">Denmark</option>
-          </Select>
-        </Field>
-        <Field label="Default currency">
-          <Select value={company.defaultCurrency} onChange={(event) => update('defaultCurrency', event.target.value)} disabled={!canEdit}>
-            <option value="NOK">NOK</option><option value="SEK">SEK</option><option value="DKK">DKK</option><option value="EUR">EUR</option><option value="USD">USD</option>
-          </Select>
-        </Field>
-        <Field label="VAT registered">
-          <Select value={company.vatRegistered ? 'yes' : 'no'} onChange={(event) => update('vatRegistered', event.target.value === 'yes')} disabled={!canEdit}>
-            <option value="no">No</option><option value="yes">Yes</option>
-          </Select>
-        </Field>
-        <Field label="VAT number">
-          <Input value={company.vatNumber ?? ''} onChange={(event) => update('vatNumber', event.target.value)} disabled={!canEdit} />
-        </Field>
-        <Field label="Bank account">
-          <Input value={company.bankAccount ?? ''} onChange={(event) => update('bankAccount', event.target.value)} disabled={!canEdit} />
-        </Field>
-        <Field label="IBAN">
-          <Input value={company.iban ?? ''} onChange={(event) => update('iban', event.target.value)} maxLength={50} disabled={!canEdit} />
-        </Field>
-        <Field label="BIC / SWIFT">
-          <Input value={company.bic ?? ''} onChange={(event) => update('bic', event.target.value)} maxLength={20} disabled={!canEdit} />
-        </Field>
-        <Field label="Default payment terms">
-          <Input type="number" min={1} max={365} value={company.settings.defaultPaymentDays} onChange={(event) => update('settings', { ...company.settings, defaultPaymentDays: Number(event.target.value) })} disabled={!canEdit} />
-        </Field>
-        <Field label="Default VAT rate (%)">
-          <Input type="number" min={0} max={100} step="0.01" value={company.settings.defaultVatRate} onChange={(event) => update('settings', { ...company.settings, defaultVatRate: Number(event.target.value) })} disabled={!canEdit} />
-        </Field>
-        <Field label="Financial year starts">
-          <Select value={company.settings.financialYearStartMonth} onChange={(event) => update('settings', { ...company.settings, financialYearStartMonth: Number(event.target.value) })} disabled={!canEdit}>
-            {['January','February','March','April','May','June','July','August','September','October','November','December'].map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
-          </Select>
-        </Field>
-      </div>
-      {!canEdit && <p className="notice">Only company owners and administrators can edit these settings.</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {saved && <p className="form-success" role="status">{saved}</p>}
-      <div className="form-actions">
-        <Button type="submit" disabled={!canEdit || saving || !dirty}>
-          <Save size={16} /> {saving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </div>
+        <div className="form-grid">
+          <Field label="Legal company name">
+            <Input
+              value={company.name}
+              onChange={(event) => update('name', event.target.value)}
+              minLength={2}
+              maxLength={200}
+              disabled={!canEdit}
+              required
+            />
+          </Field>
+          <Field label="Organisation number">
+            <Input
+              value={company.organisationNumber ?? ''}
+              onChange={(event) =>
+                update('organisationNumber', event.target.value)
+              }
+              maxLength={50}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              type="email"
+              value={company.email ?? ''}
+              onChange={(event) => update('email', event.target.value)}
+              maxLength={320}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Phone">
+            <Input
+              value={company.phone ?? ''}
+              onChange={(event) => update('phone', event.target.value)}
+              maxLength={50}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Website">
+            <Input
+              type="url"
+              placeholder="https://example.com"
+              value={company.website ?? ''}
+              onChange={(event) => update('website', event.target.value)}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Address line 1">
+            <Input
+              value={company.addressLine1 ?? ''}
+              onChange={(event) => update('addressLine1', event.target.value)}
+              maxLength={200}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Address line 2">
+            <Input
+              value={company.addressLine2 ?? ''}
+              onChange={(event) => update('addressLine2', event.target.value)}
+              maxLength={200}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Postal code">
+            <Input
+              value={company.postalCode ?? ''}
+              onChange={(event) => update('postalCode', event.target.value)}
+              maxLength={20}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="City">
+            <Input
+              value={company.city ?? ''}
+              onChange={(event) => update('city', event.target.value)}
+              maxLength={120}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Country">
+            <Select
+              value={company.countryCode}
+              onChange={(event) => update('countryCode', event.target.value)}
+              disabled={!canEdit}
+            >
+              <option value="NO">Norway</option>
+              <option value="SE">Sweden</option>
+              <option value="DK">Denmark</option>
+            </Select>
+          </Field>
+          <Field label="Default currency">
+            <Select
+              value={company.defaultCurrency}
+              onChange={(event) =>
+                update('defaultCurrency', event.target.value)
+              }
+              disabled={!canEdit}
+            >
+              <option value="NOK">NOK</option>
+              <option value="SEK">SEK</option>
+              <option value="DKK">DKK</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+            </Select>
+          </Field>
+          <Field label="VAT registered">
+            <Select
+              value={company.vatRegistered ? 'yes' : 'no'}
+              onChange={(event) =>
+                update('vatRegistered', event.target.value === 'yes')
+              }
+              disabled={!canEdit}
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </Select>
+          </Field>
+          <Field label="VAT number">
+            <Input
+              value={company.vatNumber ?? ''}
+              onChange={(event) => update('vatNumber', event.target.value)}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Bank account">
+            <Input
+              value={company.bankAccount ?? ''}
+              onChange={(event) => update('bankAccount', event.target.value)}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="IBAN">
+            <Input
+              value={company.iban ?? ''}
+              onChange={(event) => update('iban', event.target.value)}
+              maxLength={50}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="BIC / SWIFT">
+            <Input
+              value={company.bic ?? ''}
+              onChange={(event) => update('bic', event.target.value)}
+              maxLength={20}
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Default payment terms">
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              value={company.settings.defaultPaymentDays}
+              onChange={(event) =>
+                update('settings', {
+                  ...company.settings,
+                  defaultPaymentDays: Number(event.target.value),
+                })
+              }
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Default VAT rate (%)">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={company.settings.defaultVatRate}
+              onChange={(event) =>
+                update('settings', {
+                  ...company.settings,
+                  defaultVatRate: Number(event.target.value),
+                })
+              }
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Financial year starts">
+            <Select
+              value={company.settings.financialYearStartMonth}
+              onChange={(event) =>
+                update('settings', {
+                  ...company.settings,
+                  financialYearStartMonth: Number(event.target.value),
+                })
+              }
+              disabled={!canEdit}
+            >
+              {[
+                'January',
+                'February',
+                'March',
+                'April',
+                'May',
+                'June',
+                'July',
+                'August',
+                'September',
+                'October',
+                'November',
+                'December',
+              ].map((month, index) => (
+                <option value={index + 1} key={month}>
+                  {month}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Invoice number prefix">
+            <Input
+              value={company.settings.invoicePrefix}
+              maxLength={10}
+              pattern="[A-Z0-9-]+"
+              onChange={(event) =>
+                update('settings', {
+                  ...company.settings,
+                  invoicePrefix: event.target.value.toUpperCase(),
+                })
+              }
+              disabled={!canEdit}
+            />
+          </Field>
+          <Field label="Invoice number digits">
+            <Input
+              type="number"
+              min={3}
+              max={10}
+              value={company.settings.invoiceNumberPadding}
+              onChange={(event) =>
+                update('settings', {
+                  ...company.settings,
+                  invoiceNumberPadding: Number(event.target.value),
+                })
+              }
+              disabled={!canEdit}
+            />
+            <small>
+              Next number: {company.settings.invoicePrefix}-
+              {String(company.settings.nextInvoiceNumber).padStart(
+                company.settings.invoiceNumberPadding,
+                '0',
+              )}
+            </small>
+          </Field>
+        </div>
+        {!canEdit && (
+          <p className="notice">
+            Only company owners and administrators can edit these settings.
+          </p>
+        )}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {saved && (
+          <p className="form-success" role="status">
+            {saved}
+          </p>
+        )}
+        <div className="form-actions">
+          <Button type="submit" disabled={!canEdit || saving || !dirty}>
+            <Save size={16} /> {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
       </form>
     </Card>
   );
@@ -1274,10 +1476,7 @@ function TemplateSettings() {
           </Select>
         </Field>
         <Field label="Invoice footer">
-          <Textarea
-            rows={3}
-            defaultValue="Thank you for your business."
-          />
+          <Textarea rows={3} defaultValue="Thank you for your business." />
         </Field>
       </div>
       <div className="form-actions">

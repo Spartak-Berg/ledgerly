@@ -26,6 +26,7 @@ interface ProductResponse {
 }
 interface InvoiceResponse {
   id: string;
+  number: string | null;
   version: number;
   status: string;
   subtotalMinor: number;
@@ -153,12 +154,18 @@ describe('Ledgerly API (e2e)', () => {
         defaultCurrency: 'NOK',
         defaultPaymentDays: 21,
         vatRegistered: true,
+        invoicePrefix: 'TEST',
+        invoiceNumberPadding: 5,
       })
       .expect(200)
       .expect((response) => {
         expect(response.body).toMatchObject({
           city: 'Oslo',
-          settings: { defaultPaymentDays: 21 },
+          settings: {
+            defaultPaymentDays: 21,
+            invoicePrefix: 'TEST',
+            invoiceNumberPadding: 5,
+          },
           vatRegistered: true,
         });
       });
@@ -388,6 +395,79 @@ describe('Ledgerly API (e2e)', () => {
       .set('x-csrf-token', csrfToken)
       .send({ ...draft, version: 1 })
       .expect(409);
+
+    const parallelDraft = await agent
+      .post(`/api/v1/invoices/${createdBody.id}/duplicate`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(201);
+    const parallelBody = parallelDraft.body as unknown as InvoiceResponse;
+    createdInvoiceIds.push(parallelBody.id);
+    const [issued, parallelIssued] = await Promise.all([
+      agent
+        .post(`/api/v1/invoices/${createdBody.id}/issue`)
+        .set('x-company-id', primaryCompanyId)
+        .set('x-csrf-token', csrfToken)
+        .send({ version: 2 })
+        .expect(201),
+      agent
+        .post(`/api/v1/invoices/${parallelBody.id}/issue`)
+        .set('x-company-id', primaryCompanyId)
+        .set('x-csrf-token', csrfToken)
+        .send({ version: 1 })
+        .expect(201),
+    ]);
+    const issuedBody = issued.body as unknown as InvoiceResponse;
+    const parallelIssuedBody =
+      parallelIssued.body as unknown as InvoiceResponse;
+    expect(issuedBody.status).toBe('ISSUED');
+    expect(issuedBody.number).toMatch(/^TEST-\d{5}$/);
+    expect(parallelIssuedBody.number).toMatch(/^TEST-\d{5}$/);
+    expect(parallelIssuedBody.number).not.toBe(issuedBody.number);
+
+    await agent
+      .patch(`/api/v1/invoices/${createdBody.id}`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ ...draft, version: issuedBody.version })
+      .expect(409);
+    await agent
+      .get(`/api/v1/invoices/${createdBody.id}/pdf`)
+      .set('x-company-id', primaryCompanyId)
+      .expect('content-type', 'application/pdf')
+      .expect('content-disposition', /attachment; filename="TEST-\d{5}\.pdf"/)
+      .expect(200)
+      .expect((response) => {
+        expect(
+          Buffer.from(response.body as ArrayBuffer)
+            .subarray(0, 4)
+            .toString(),
+        ).toBe('%PDF');
+      });
+    await agent
+      .get(`/api/v1/invoices/${createdBody.id}/pdf`)
+      .set('x-company-id', accountantCompanyId)
+      .expect(404);
+    await agent
+      .post(`/api/v1/invoices/${createdBody.id}/mark-sent`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .expect(201)
+      .expect((response) =>
+        expect(response.body).toMatchObject({ status: 'SENT' }),
+      );
+    await agent
+      .post(`/api/v1/invoices/${createdBody.id}/void`)
+      .set('x-company-id', primaryCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ reason: 'Cancelled by customer' })
+      .expect(201)
+      .expect((response) =>
+        expect(response.body).toMatchObject({
+          status: 'VOID',
+          voidReason: 'Cancelled by customer',
+        }),
+      );
 
     const duplicate = await agent
       .post(`/api/v1/invoices/${createdBody.id}/duplicate`)

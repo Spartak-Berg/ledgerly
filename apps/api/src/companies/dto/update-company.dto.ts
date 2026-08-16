@@ -133,4 +133,18 @@ export class UpdateCompanyDto {
   @Min(1)
   @Max(12)
   financialYearStartMonth?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10)
+  @Matches(/^[A-Z0-9-]+$/)
+  @Transform(upper)
+  invoicePrefix?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(3)
+  @Max(10)
+  invoiceNumberPadding?: number;
 }

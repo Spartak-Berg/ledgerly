@@ -1,12 +1,7 @@
-import { request } from './api';
+import { download, request } from './api';
 
 export type InvoiceStatus =
-  | 'DRAFT'
-  | 'SENT'
-  | 'PARTIALLY_PAID'
-  | 'PAID'
-  | 'OVERDUE'
-  | 'VOID';
+  'DRAFT' | 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID';
 
 export interface InvoiceItemInput {
   productId?: string | null;
@@ -57,6 +52,12 @@ export interface Invoice {
   vatMinor: number;
   totalMinor: number;
   version: number;
+  createdAt: string;
+  updatedAt: string;
+  issuedAt: string | null;
+  sentAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
   items?: InvoiceItem[];
 }
 
@@ -85,5 +86,23 @@ export const invoicesApi = {
   },
   archive(id: string) {
     return request<{ archived: true }>(`/invoices/${id}`, { method: 'DELETE' });
+  },
+  issue(id: string, version: number) {
+    return request<Invoice>(`/invoices/${id}/issue`, {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    });
+  },
+  markSent(id: string) {
+    return request<Invoice>(`/invoices/${id}/mark-sent`, { method: 'POST' });
+  },
+  void(id: string, reason: string) {
+    return request<Invoice>(`/invoices/${id}/void`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+  downloadPdf(id: string) {
+    return download(`/invoices/${id}/pdf`);
   },
 };

@@ -99,6 +99,9 @@ model CompanySettings {
   defaultPaymentDays      Int      @default(14)
   defaultVatRate          Decimal  @default(25) @db.Decimal(5, 2)
   financialYearStartMonth Int      @default(1)
+  invoicePrefix           String   @default("INV") @db.VarChar(10)
+  invoiceNumberPadding    Int      @default(4)
+  nextInvoiceNumber       Int      @default(1)
   company                 Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -179,6 +182,10 @@ model Invoice {
   totalMinor             Int           @default(0)
   version                Int           @default(1)
   archivedAt             DateTime?
+  issuedAt               DateTime?
+  sentAt                 DateTime?
+  voidedAt               DateTime?
+  voidReason             String?
   company                Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   customer               Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items                  InvoiceItem[]
@@ -232,6 +239,7 @@ enum ProductType {
 
 enum InvoiceStatus {
   DRAFT
+  ISSUED
   SENT
   PARTIALLY_PAID
   PAID

@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -12,7 +17,15 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Download, Filter, Pencil, Plus, Receipt, Trash2, UserPlus } from 'lucide-react';
+import {
+  Download,
+  Filter,
+  Pencil,
+  Plus,
+  Receipt,
+  Trash2,
+  UserPlus,
+} from 'lucide-react';
 import {
   Button,
   Card,
@@ -58,10 +71,7 @@ export function Dashboard() {
             <Button variant="secondary">
               <Download size={16} /> Export
             </Button>
-            <Link
-              className="button button-primary"
-              to="/invoices/new"
-            >
+            <Link className="button button-primary" to="/invoices/new">
               <Plus size={16} /> New invoice
             </Link>
           </div>
@@ -105,40 +115,16 @@ export function Dashboard() {
             </Select>
           </div>
           <div className="chart">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={cashFlow}>
                 <defs>
-                  <linearGradient
-                    id="income"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="5%"
-                      stopColor="#3b73ed"
-                      stopOpacity={0.2}
-                    />
-                    <stop
-                      offset="95%"
-                      stopColor="#3b73ed"
-                      stopOpacity={0}
-                    />
+                  <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b73ed" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#3b73ed" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -181,10 +167,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="donut">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={statusData}
@@ -194,10 +177,7 @@ export function Dashboard() {
                   dataKey="value"
                 >
                   {statusData.map((x) => (
-                    <Cell
-                      key={x.name}
-                      fill={x.color}
-                    />
+                    <Cell key={x.name} fill={x.color} />
                   ))}
                 </Pie>
               </PieChart>
@@ -286,10 +266,7 @@ function InvoiceTable({ compact = false }: { compact?: boolean }) {
           {invoices.slice(0, compact ? 4 : 5).map((x) => (
             <tr key={x.id}>
               <td>
-                <Link
-                  className="strong-link"
-                  to="/invoices"
-                >
+                <Link className="strong-link" to="/invoices">
                   {x.number}
                 </Link>
               </td>
@@ -314,7 +291,8 @@ function InvoiceTable({ compact = false }: { compact?: boolean }) {
 
 export function Customers() {
   const { profile } = useAuth();
-  const canManage = profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
+  const canManage =
+    profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
   const [list, setList] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -333,12 +311,18 @@ export function Customers() {
       if (query) params.set('search', query);
       if (status !== 'All') params.set('status', status.toUpperCase());
       customerApi
-      .search(params)
-      .then((result) => active && setList(result.items))
-      .catch((reason: unknown) =>
-        active && setError(reason instanceof Error ? reason.message : 'Could not load customers'),
-      )
-      .finally(() => active && setLoading(false));
+        .search(params)
+        .then((result) => active && setList(result.items))
+        .catch(
+          (reason: unknown) =>
+            active &&
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : 'Could not load customers',
+            ),
+        )
+        .finally(() => active && setLoading(false));
     }, 250);
     return () => {
       active = false;
@@ -360,10 +344,16 @@ export function Customers() {
   const saveCustomer = async (input: CustomerInput) => {
     if (editing) {
       const updated = await customerApi.update(editing.id, input);
-      setList((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setList((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
     } else {
       const created = await customerApi.create(input);
-      setList((current) => [...current, created].sort((a, b) => a.company.localeCompare(b.company)));
+      setList((current) =>
+        [...current, created].sort((a, b) =>
+          a.company.localeCompare(b.company),
+        ),
+      );
     }
     closeDialog();
   };
@@ -372,10 +362,15 @@ export function Customers() {
     setArchiving(true);
     try {
       await customerApi.remove(customer.id);
-      setList((current) => current.filter((item) => item.id !== customer.id)); setPendingArchive(undefined);
+      setList((current) => current.filter((item) => item.id !== customer.id));
+      setPendingArchive(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not archive customer');
-    } finally { setArchiving(false); }
+      setError(
+        reason instanceof Error ? reason.message : 'Could not archive customer',
+      );
+    } finally {
+      setArchiving(false);
+    }
   };
 
   return (
@@ -384,22 +379,34 @@ export function Customers() {
         title="Customers"
         description="Manage customer details and billing contacts."
         action={
-          canManage ? <Button onClick={() => setEditing(null)}>
-            <Plus size={16} /> Add customer
-          </Button> : undefined
+          canManage ? (
+            <Button onClick={() => setEditing(null)}>
+              <Plus size={16} /> Add customer
+            </Button>
+          ) : undefined
         }
       />
       <Card>
         <div className="filterbar">
           <SearchInput
             value={query}
-            onChange={(e) => { const next = new URLSearchParams(searchParams); if (e.target.value) next.set('q', e.target.value); else next.delete('q'); setSearchParams(next, { replace: true }); }}
+            onChange={(e) => {
+              const next = new URLSearchParams(searchParams);
+              if (e.target.value) next.set('q', e.target.value);
+              else next.delete('q');
+              setSearchParams(next, { replace: true });
+            }}
             placeholder="Search customers…"
           />
           <div>
             <Select
               value={status}
-              onChange={(e) => { const next = new URLSearchParams(searchParams); if (e.target.value === 'All') next.delete('status'); else next.set('status', e.target.value); setSearchParams(next, { replace: true }); }}
+              onChange={(e) => {
+                const next = new URLSearchParams(searchParams);
+                if (e.target.value === 'All') next.delete('status');
+                else next.set('status', e.target.value);
+                setSearchParams(next, { replace: true });
+              }}
             >
               <option>All</option>
               <option>Active</option>
@@ -424,10 +431,7 @@ export function Customers() {
                 {filtered.map((x) => (
                   <tr key={x.id}>
                     <td>
-                      <Link
-                        className="customer-cell"
-                        to={`/customers/${x.id}`}
-                      >
+                      <Link className="customer-cell" to={`/customers/${x.id}`}>
                         <span>{x.company.slice(0, 2).toUpperCase()}</span>
                         <b>{x.company}</b>
                       </Link>
@@ -443,14 +447,24 @@ export function Customers() {
                       <StatusBadge>{x.status}</StatusBadge>
                     </td>
                     <td>
-                      {canManage && <div className="row-actions">
-                        <Button variant="ghost" aria-label={`Edit ${x.company}`} onClick={() => setEditing(x)}>
-                          <Pencil size={15} />
-                        </Button>
-                        <Button variant="ghost" aria-label={`Archive ${x.company}`} onClick={() => setPendingArchive(x)}>
-                          <Trash2 size={15} />
-                        </Button>
-                      </div>}
+                      {canManage && (
+                        <div className="row-actions">
+                          <Button
+                            variant="ghost"
+                            aria-label={`Edit ${x.company}`}
+                            onClick={() => setEditing(x)}
+                          >
+                            <Pencil size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            aria-label={`Archive ${x.company}`}
+                            onClick={() => setPendingArchive(x)}
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -482,18 +496,43 @@ export function Customers() {
                 </div>
               </dl>
               <div className="mobile-record-actions">
-                <Link className="button button-secondary" to={`/customers/${x.id}`}>View</Link>
-                {canManage && <><Button variant="secondary" onClick={() => setEditing(x)}>Edit</Button><Button variant="ghost" onClick={() => setPendingArchive(x)}>Archive</Button></>}
+                <Link
+                  className="button button-secondary"
+                  to={`/customers/${x.id}`}
+                >
+                  View
+                </Link>
+                {canManage && (
+                  <>
+                    <Button variant="secondary" onClick={() => setEditing(x)}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setPendingArchive(x)}
+                    >
+                      Archive
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           ))}
         </div>
         {loading && <LoadingSkeleton />}
-        {!loading && error && <div className="api-error" role="alert">{error}</div>}
+        {!loading && error && (
+          <div className="api-error" role="alert">
+            {error}
+          </div>
+        )}
         {!loading && !error && filtered.length === 0 && (
           <EmptyState
             title={list.length ? 'No matching customers' : 'No customers yet'}
-            description={list.length ? 'Try changing your search or status filter.' : 'Add your first customer to get started.'}
+            description={
+              list.length
+                ? 'Try changing your search or status filter.'
+                : 'Add your first customer to get started.'
+            }
           />
         )}
       </Card>
@@ -504,14 +543,24 @@ export function Customers() {
           onSave={saveCustomer}
         />
       )}
-      {pendingArchive && <ConfirmDialog title={`Archive ${pendingArchive.company}?`} description="The customer will be hidden from active workflows while its history remains preserved." confirmLabel="Archive customer" busy={archiving} onCancel={() => setPendingArchive(undefined)} onConfirm={() => void removeCustomer(pendingArchive)} />}
+      {pendingArchive && (
+        <ConfirmDialog
+          title={`Archive ${pendingArchive.company}?`}
+          description="The customer will be hidden from active workflows while its history remains preserved."
+          confirmLabel="Archive customer"
+          busy={archiving}
+          onCancel={() => setPendingArchive(undefined)}
+          onConfirm={() => void removeCustomer(pendingArchive)}
+        />
+      )}
     </div>
   );
 }
 
 export function CustomerDetail() {
   const { profile } = useAuth();
-  const canManage = profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
+  const canManage =
+    profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
   const { id } = useParams();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer>();
@@ -527,8 +576,14 @@ export function CustomerDetail() {
     customerApi
       .get(id)
       .then((result) => active && setCustomer(result))
-      .catch((reason: unknown) =>
-        active && setError(reason instanceof Error ? reason.message : 'Could not load customer'),
+      .catch(
+        (reason: unknown) =>
+          active &&
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : 'Could not load customer',
+          ),
       )
       .finally(() => active && setLoading(false));
     return () => {
@@ -536,11 +591,21 @@ export function CustomerDetail() {
     };
   }, [id]);
 
-  if (loading) return <div className="page"><LoadingSkeleton /></div>;
+  if (loading)
+    return (
+      <div className="page">
+        <LoadingSkeleton />
+      </div>
+    );
   if (!customer) {
     return (
       <div className="page">
-        <Card><EmptyState title="Customer not found" description={error || 'This customer may have been deleted.'} /></Card>
+        <Card>
+          <EmptyState
+            title="Customer not found"
+            description={error || 'This customer may have been deleted.'}
+          />
+        </Card>
       </div>
     );
   }
@@ -556,7 +621,9 @@ export function CustomerDetail() {
       await customerApi.remove(customer.id);
       navigate('/customers');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not archive customer');
+      setError(
+        reason instanceof Error ? reason.message : 'Could not archive customer',
+      );
     }
   };
 
@@ -574,7 +641,16 @@ export function CustomerDetail() {
           </div>
         </div>
         <div className="button-row">
-          {canManage && <><Button variant="secondary" onClick={() => setEditing(true)}>Edit customer</Button><Button variant="ghost" onClick={() => setConfirmArchive(true)}><Trash2 size={16} /> Archive</Button></>}
+          {canManage && (
+            <>
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                Edit customer
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmArchive(true)}>
+                <Trash2 size={16} /> Archive
+              </Button>
+            </>
+          )}
           <Link
             className="button button-primary"
             to={`/invoices/new?customer=${customer.id}`}
@@ -583,10 +659,7 @@ export function CustomerDetail() {
           </Link>
         </div>
       </div>
-      <div
-        className="tabs"
-        role="tablist"
-      >
+      <div className="tabs" role="tablist">
         {['Overview', 'Invoices', 'Notes', 'Activity'].map((x) => (
           <button
             role="tab"
@@ -612,24 +685,54 @@ export function CustomerDetail() {
               <div>
                 <dt>Email</dt>
                 <dd>
-                  {customer.email ? <a href={`mailto:${customer.email}`}>{customer.email}</a> : 'Not provided'}
+                  {customer.email ? (
+                    <a href={`mailto:${customer.email}`}>{customer.email}</a>
+                  ) : (
+                    'Not provided'
+                  )}
                 </dd>
               </div>
               <div>
                 <dt>Phone</dt>
                 <dd>{customer.phone || 'Not provided'}</dd>
               </div>
-              <div><dt>Organisation number</dt><dd>{customer.organisationNumber || 'Not provided'}</dd></div>
-              <div><dt>Billing address</dt><dd>{[customer.billingAddressLine1, customer.billingPostalCode, customer.billingCity, customer.countryCode].filter(Boolean).join(', ') || 'Not provided'}</dd></div>
-              <div><dt>VAT number</dt><dd>{customer.vatNumber || 'Not provided'}</dd></div>
-              <div><dt>Payment terms</dt><dd>{customer.defaultPaymentDays} days · {customer.defaultCurrency}</dd></div>
+              <div>
+                <dt>Organisation number</dt>
+                <dd>{customer.organisationNumber || 'Not provided'}</dd>
+              </div>
+              <div>
+                <dt>Billing address</dt>
+                <dd>
+                  {[
+                    customer.billingAddressLine1,
+                    customer.billingPostalCode,
+                    customer.billingCity,
+                    customer.countryCode,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || 'Not provided'}
+                </dd>
+              </div>
+              <div>
+                <dt>VAT number</dt>
+                <dd>{customer.vatNumber || 'Not provided'}</dd>
+              </div>
+              <div>
+                <dt>Payment terms</dt>
+                <dd>
+                  {customer.defaultPaymentDays} days ·{' '}
+                  {customer.defaultCurrency}
+                </dd>
+              </div>
             </dl>
           </Card>
           <div>
             <Card className="balance">
               <p>Outstanding balance</p>
               <strong>{money(customer.outstanding)}</strong>
-              <span>Invoice balances will appear after invoice integration</span>
+              <span>
+                Invoice balances will appear after invoice integration
+              </span>
             </Card>
             <Card className="mini-stats">
               <div>
@@ -660,11 +763,27 @@ export function CustomerDetail() {
           </div>
         </Card>
       )}
-      {error && <div className="api-error" role="alert">{error}</div>}
-      {editing && (
-        <CustomerDialog customer={customer} onClose={() => setEditing(false)} onSave={updateCustomer} />
+      {error && (
+        <div className="api-error" role="alert">
+          {error}
+        </div>
       )}
-      {confirmArchive && <ConfirmDialog title={`Archive ${customer.company}?`} description="The customer history will remain preserved." confirmLabel="Archive customer" onCancel={() => setConfirmArchive(false)} onConfirm={() => void removeCustomer()} />}
+      {editing && (
+        <CustomerDialog
+          customer={customer}
+          onClose={() => setEditing(false)}
+          onSave={updateCustomer}
+        />
+      )}
+      {confirmArchive && (
+        <ConfirmDialog
+          title={`Archive ${customer.company}?`}
+          description="The customer history will remain preserved."
+          confirmLabel="Archive customer"
+          onCancel={() => setConfirmArchive(false)}
+          onConfirm={() => void removeCustomer()}
+        />
+      )}
     </div>
   );
 }
@@ -693,9 +812,14 @@ export function Invoices() {
           setList(result);
           setError('');
         })
-        .catch((reason: unknown) =>
-          active &&
-          setError(reason instanceof Error ? reason.message : 'Could not load invoices'),
+        .catch(
+          (reason: unknown) =>
+            active &&
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : 'Could not load invoices',
+            ),
         )
         .finally(() => active && setLoading(false));
     }, 250);
@@ -716,7 +840,11 @@ export function Invoices() {
       const copy = await invoicesApi.duplicate(invoice.id);
       setList((current) => [copy, ...current]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not duplicate invoice');
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : 'Could not duplicate invoice',
+      );
     }
   };
 
@@ -724,10 +852,14 @@ export function Invoices() {
     if (!pendingArchive) return;
     try {
       await invoicesApi.archive(pendingArchive.id);
-      setList((current) => current.filter((item) => item.id !== pendingArchive.id));
+      setList((current) =>
+        current.filter((item) => item.id !== pendingArchive.id),
+      );
       setPendingArchive(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not archive invoice');
+      setError(
+        reason instanceof Error ? reason.message : 'Could not archive invoice',
+      );
     }
   };
   return (
@@ -736,24 +868,25 @@ export function Invoices() {
         title="Invoices"
         description="Create, send and track customer invoices."
         action={
-          canManage ? <Link
-            className="button button-primary"
-            to="/invoices/new"
-          >
-            <Plus size={16} /> Create invoice
-          </Link> : undefined
+          canManage ? (
+            <Link className="button button-primary" to="/invoices/new">
+              <Plus size={16} /> Create invoice
+            </Link>
+          ) : undefined
         }
       />
       <div className="tabs invoice-tabs">
-        {['All', 'Draft', 'Sent', 'Paid', 'Overdue'].map((x) => (
-          <button
-            className={tab === x ? 'active' : ''}
-            onClick={() => setTab(x)}
-            key={x}
-          >
-            {x}
-          </button>
-        ))}
+        {['All', 'Draft', 'Issued', 'Sent', 'Paid', 'Overdue', 'Void'].map(
+          (x) => (
+            <button
+              className={tab === x ? 'active' : ''}
+              onClick={() => setTab(x)}
+              key={x}
+            >
+              {x}
+            </button>
+          ),
+        )}
       </div>
       <Card>
         <div className="filterbar">
@@ -763,55 +896,81 @@ export function Invoices() {
             placeholder="Search invoices…"
           />
         </div>
-        {error && <div className="api-error" role="alert">{error}</div>}
-        {loading ? <LoadingSkeleton /> : list.length ? <TableWrap>
-          <table>
-            <thead>
-              <tr>
-                <th>Invoice</th>
-                <th>Customer</th>
-                <th>Issued</th>
-                <th>Due</th>
-                <th>Status</th>
-                <th className="number">Amount</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((x) => (
-                <tr key={x.id}>
-                  <td className="strong">{x.number ?? 'Draft'}</td>
-                  <td>{x.customerNameSnapshot}</td>
-                  <td>{shortDate(x.issueDate)}</td>
-                  <td className={x.status === 'OVERDUE' ? 'overdue' : ''}>
-                    {shortDate(x.dueDate)}
-                  </td>
-                  <td>
-                    <StatusBadge>{label(x.status)}</StatusBadge>
-                  </td>
-                  <td className="number strong">
-                    {money(x.totalMinor / 100, x.currency)}
-                  </td>
-                  <td>
-                    {x.status === 'DRAFT' && canManage && (
-                      <div className="row-actions">
-                        <Link className="button button-ghost" to={`/invoices/${x.id}/edit`}>
-                          <Pencil size={15} /> Edit
-                        </Link>
-                        <Button variant="ghost" onClick={() => void duplicate(x)}>
-                          Duplicate
-                        </Button>
-                        <Button variant="ghost" onClick={() => setPendingArchive(x)}>
-                          Archive
-                        </Button>
-                      </div>
-                    )}
-                  </td>
+        {error && (
+          <div className="api-error" role="alert">
+            {error}
+          </div>
+        )}
+        {loading ? (
+          <LoadingSkeleton />
+        ) : list.length ? (
+          <TableWrap>
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th>Customer</th>
+                  <th>Issued</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                  <th className="number">Amount</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableWrap> : <EmptyState title="No invoices found" description="Create a draft or adjust the current filters." />}
+              </thead>
+              <tbody>
+                {list.map((x) => (
+                  <tr key={x.id}>
+                    <td className="strong">
+                      <Link className="strong-link" to={`/invoices/${x.id}`}>
+                        {x.number ?? 'Draft'}
+                      </Link>
+                    </td>
+                    <td>{x.customerNameSnapshot}</td>
+                    <td>{shortDate(x.issueDate)}</td>
+                    <td className={x.status === 'OVERDUE' ? 'overdue' : ''}>
+                      {shortDate(x.dueDate)}
+                    </td>
+                    <td>
+                      <StatusBadge>{label(x.status)}</StatusBadge>
+                    </td>
+                    <td className="number strong">
+                      {money(x.totalMinor / 100, x.currency)}
+                    </td>
+                    <td>
+                      {x.status === 'DRAFT' && canManage && (
+                        <div className="row-actions">
+                          <Link
+                            className="button button-ghost"
+                            to={`/invoices/${x.id}/edit`}
+                          >
+                            <Pencil size={15} /> Edit
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            onClick={() => void duplicate(x)}
+                          >
+                            Duplicate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => setPendingArchive(x)}
+                          >
+                            Archive
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        ) : (
+          <EmptyState
+            title="No invoices found"
+            description="Create a draft or adjust the current filters."
+          />
+        )}
       </Card>
       {pendingArchive && (
         <ConfirmDialog
@@ -837,10 +996,7 @@ export function Expenses() {
         title="Expenses"
         description="Track receipts, purchases and business spending."
         action={
-          <Link
-            className="button button-primary"
-            to="/expenses/upload"
-          >
+          <Link className="button button-primary" to="/expenses/upload">
             <Plus size={16} /> Upload receipt
           </Link>
         }
