@@ -7,42 +7,60 @@ datasource db {
 }
 
 model User {
-  id           String          @id @default(uuid()) @db.Uuid
-  email        String          @unique
-  passwordHash String
-  fullName     String
-  emailVerifiedAt DateTime?
-  memberships CompanyMember[]
-  sessions     Session[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                String          @id @default(uuid()) @db.Uuid
+  email             String          @unique
+  passwordHash      String
+  fullName          String
+  selectedCompanyId String?         @db.Uuid
+  emailVerifiedAt   DateTime?
+  memberships       CompanyMember[]
+  sessions          Session[]
+  selectedCompany   Company?        @relation("SelectedCompany", fields: [selectedCompanyId], references: [id], onDelete: SetNull)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@map("users")
 }
 
 model Company {
-  id              String           @id @default(uuid()) @db.Uuid
-  name            String
-  slug            String           @unique
-  defaultCurrency String           @default("NOK") @db.VarChar(3)
-  memberships     CompanyMember[]
-  settings        CompanySettings?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                 String           @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String           @unique
+  defaultCurrency    String           @default("NOK") @db.VarChar(3)
+  organisationNumber String?
+  email              String?
+  phone              String?
+  website            String?
+  addressLine1       String?
+  addressLine2       String?
+  postalCode         String?
+  city               String?
+  countryCode        String           @default("NO") @db.VarChar(2)
+  vatRegistered      Boolean          @default(false)
+  vatNumber          String?
+  bankAccount        String?
+  iban               String?
+  bic                String?
+  memberships        CompanyMember[]
+  settings           CompanySettings?
+  selectedBy         User[]           @relation("SelectedCompany")
+  customers          Customer[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   @@index([name])
   @@map("companies")
 }
 
 model CompanyMember {
-  id        String     @id @default(uuid()) @db.Uuid
-  userId    String     @db.Uuid
-  companyId String     @db.Uuid
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @db.Uuid
+  companyId String      @db.Uuid
   role      CompanyRole @default(EMPLOYEE)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@unique([userId, companyId])
   @@index([companyId, role])
@@ -50,12 +68,13 @@ model CompanyMember {
 }
 
 model CompanySettings {
-  companyId          String  @id @db.Uuid
-  defaultPaymentDays Int     @default(14)
-  defaultVatRate     Decimal @default(25) @db.Decimal(5, 2)
-  company            Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  companyId               String   @id @db.Uuid
+  defaultPaymentDays      Int      @default(14)
+  defaultVatRate          Decimal  @default(25) @db.Decimal(5, 2)
+  financialYearStartMonth Int      @default(1)
+  company                 Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   @@map("company_settings")
 }
@@ -79,6 +98,7 @@ model Session {
 
 model Customer {
   id          String         @id @default(uuid()) @db.Uuid
+  companyId   String?        @db.Uuid
   companyName String
   contactName String?
   email       String?
@@ -86,7 +106,9 @@ model Customer {
   status      CustomerStatus @default(ACTIVE)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  company     Company?       @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
+  @@index([companyId, companyName])
   @@index([companyName])
   @@map("customers")
 }

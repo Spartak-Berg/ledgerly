@@ -19,7 +19,7 @@ import {
   REFRESH_COOKIE,
   REFRESH_TOKEN_TTL_MS,
 } from './auth.constants';
-import { Public, SkipCsrf } from './auth.decorators';
+import { Public, SkipCompanyContext, SkipCsrf } from './auth.decorators';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -39,6 +39,7 @@ const cookieValue = (request: Request, name: string) =>
   ((request.cookies ?? {}) as Record<string, string | undefined>)[name];
 
 @Controller('auth')
+@SkipCompanyContext()
 export class AuthController {
   constructor(
     private readonly auth: AuthService,

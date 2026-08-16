@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -46,7 +46,9 @@ import {
   StatusBadge,
   Textarea,
 } from '../components';
-import { customerApi } from '../api';
+import { ApiError, customerApi } from '../api';
+import { companyApi, type CompanyDetail } from '../company-api';
+import { useAuth } from '../useAuth';
 import { cashFlow } from '../data';
 import { downloadInvoicePdf } from '../invoicePdf';
 import { invoiceTotals, money, type Customer, type LineItem } from '../lib';
@@ -865,6 +867,96 @@ export function SettingsPage() {
   );
 }
 function CompanySettings() {
+  const { profile, refreshProfile } = useAuth();
+  const companyId = profile?.company.id;
+  const [company, setCompany] = useState<CompanyDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState('');
+
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    companyApi
+      .get(companyId)
+      .then((result) => active && setCompany(result))
+      .catch((reason: unknown) =>
+        active &&
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : 'Could not load company settings',
+        ),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  if (loading) {
+    return <Card className="settings-card"><p className="settings-state">Loading company settings…</p></Card>;
+  }
+  if (!company || !profile) {
+    return <Card className="settings-card"><p className="api-error">{error || 'Company settings are unavailable.'}</p></Card>;
+  }
+
+  const canEdit = ['OWNER', 'ADMIN'].includes(profile.company.role);
+  const update = <K extends keyof CompanyDetail>(key: K, value: CompanyDetail[K]) => {
+    setCompany((current) => (current ? { ...current, [key]: value } : current));
+    setDirty(true);
+    setSaved('');
+  };
+  const nullable = (value: string) => value.trim() || null;
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    setSaved('');
+    try {
+      const updated = await companyApi.update(company.id, {
+        name: company.name.trim(),
+        organisationNumber: nullable(company.organisationNumber ?? ''),
+        email: nullable(company.email ?? ''),
+        phone: nullable(company.phone ?? ''),
+        website: nullable(company.website ?? ''),
+        addressLine1: nullable(company.addressLine1 ?? ''),
+        addressLine2: nullable(company.addressLine2 ?? ''),
+        postalCode: nullable(company.postalCode ?? ''),
+        city: nullable(company.city ?? ''),
+        countryCode: company.countryCode,
+        defaultCurrency: company.defaultCurrency,
+        vatRegistered: company.vatRegistered,
+        vatNumber: nullable(company.vatNumber ?? ''),
+        bankAccount: nullable(company.bankAccount ?? ''),
+        iban: nullable(company.iban ?? ''),
+        bic: nullable(company.bic ?? ''),
+        defaultPaymentDays: company.settings.defaultPaymentDays,
+        defaultVatRate: company.settings.defaultVatRate,
+        financialYearStartMonth: company.settings.financialYearStartMonth,
+      });
+      setCompany(updated);
+      setDirty(false);
+      setSaved('Company settings saved.');
+      await refreshProfile();
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : 'Could not save company settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Card className="settings-card">
       <div className="card-head">
@@ -874,50 +966,91 @@ function CompanySettings() {
         </div>
       </div>
       <div className="company-logo-edit">
-        <span>NS</span>
+        <span>{company.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
         <div>
-          <Button variant="secondary">Change logo</Button>
-          <small>PNG, JPG or SVG. Max 2 MB.</small>
+          <b>{company.name}</b>
+          <small>Logo upload will be enabled with secure document storage.</small>
         </div>
       </div>
+      <form onSubmit={(event) => void submit(event)}>
       <div className="form-grid">
         <Field label="Legal company name">
-          <Input defaultValue="Nordic Studio AS" />
+          <Input value={company.name} onChange={(event) => update('name', event.target.value)} minLength={2} maxLength={200} disabled={!canEdit} required />
         </Field>
         <Field label="Organisation number">
-          <Input defaultValue="923 456 781" />
+          <Input value={company.organisationNumber ?? ''} onChange={(event) => update('organisationNumber', event.target.value)} maxLength={50} disabled={!canEdit} />
         </Field>
         <Field label="Email">
-          <Input
-            type="email"
-            defaultValue="hello@nordicstudio.no"
-          />
+          <Input type="email" value={company.email ?? ''} onChange={(event) => update('email', event.target.value)} maxLength={320} disabled={!canEdit} />
         </Field>
         <Field label="Phone">
-          <Input defaultValue="+47 22 45 67 89" />
+          <Input value={company.phone ?? ''} onChange={(event) => update('phone', event.target.value)} maxLength={50} disabled={!canEdit} />
         </Field>
-        <Field label="Address">
-          <Input defaultValue="Storgata 18" />
+        <Field label="Website">
+          <Input type="url" placeholder="https://example.com" value={company.website ?? ''} onChange={(event) => update('website', event.target.value)} disabled={!canEdit} />
+        </Field>
+        <Field label="Address line 1">
+          <Input value={company.addressLine1 ?? ''} onChange={(event) => update('addressLine1', event.target.value)} maxLength={200} disabled={!canEdit} />
+        </Field>
+        <Field label="Address line 2">
+          <Input value={company.addressLine2 ?? ''} onChange={(event) => update('addressLine2', event.target.value)} maxLength={200} disabled={!canEdit} />
         </Field>
         <Field label="Postal code">
-          <Input defaultValue="0155" />
+          <Input value={company.postalCode ?? ''} onChange={(event) => update('postalCode', event.target.value)} maxLength={20} disabled={!canEdit} />
         </Field>
         <Field label="City">
-          <Input defaultValue="Oslo" />
+          <Input value={company.city ?? ''} onChange={(event) => update('city', event.target.value)} maxLength={120} disabled={!canEdit} />
         </Field>
         <Field label="Country">
-          <Select>
-            <option>Norway</option>
-            <option>Sweden</option>
-            <option>Denmark</option>
+          <Select value={company.countryCode} onChange={(event) => update('countryCode', event.target.value)} disabled={!canEdit}>
+            <option value="NO">Norway</option>
+            <option value="SE">Sweden</option>
+            <option value="DK">Denmark</option>
+          </Select>
+        </Field>
+        <Field label="Default currency">
+          <Select value={company.defaultCurrency} onChange={(event) => update('defaultCurrency', event.target.value)} disabled={!canEdit}>
+            <option value="NOK">NOK</option><option value="SEK">SEK</option><option value="DKK">DKK</option><option value="EUR">EUR</option><option value="USD">USD</option>
+          </Select>
+        </Field>
+        <Field label="VAT registered">
+          <Select value={company.vatRegistered ? 'yes' : 'no'} onChange={(event) => update('vatRegistered', event.target.value === 'yes')} disabled={!canEdit}>
+            <option value="no">No</option><option value="yes">Yes</option>
+          </Select>
+        </Field>
+        <Field label="VAT number">
+          <Input value={company.vatNumber ?? ''} onChange={(event) => update('vatNumber', event.target.value)} disabled={!canEdit} />
+        </Field>
+        <Field label="Bank account">
+          <Input value={company.bankAccount ?? ''} onChange={(event) => update('bankAccount', event.target.value)} disabled={!canEdit} />
+        </Field>
+        <Field label="IBAN">
+          <Input value={company.iban ?? ''} onChange={(event) => update('iban', event.target.value)} maxLength={50} disabled={!canEdit} />
+        </Field>
+        <Field label="BIC / SWIFT">
+          <Input value={company.bic ?? ''} onChange={(event) => update('bic', event.target.value)} maxLength={20} disabled={!canEdit} />
+        </Field>
+        <Field label="Default payment terms">
+          <Input type="number" min={1} max={365} value={company.settings.defaultPaymentDays} onChange={(event) => update('settings', { ...company.settings, defaultPaymentDays: Number(event.target.value) })} disabled={!canEdit} />
+        </Field>
+        <Field label="Default VAT rate (%)">
+          <Input type="number" min={0} max={100} step="0.01" value={company.settings.defaultVatRate} onChange={(event) => update('settings', { ...company.settings, defaultVatRate: Number(event.target.value) })} disabled={!canEdit} />
+        </Field>
+        <Field label="Financial year starts">
+          <Select value={company.settings.financialYearStartMonth} onChange={(event) => update('settings', { ...company.settings, financialYearStartMonth: Number(event.target.value) })} disabled={!canEdit}>
+            {['January','February','March','April','May','June','July','August','September','October','November','December'].map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
           </Select>
         </Field>
       </div>
+      {!canEdit && <p className="notice">Only company owners and administrators can edit these settings.</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {saved && <p className="form-success" role="status">{saved}</p>}
       <div className="form-actions">
-        <Button>
-          <Save size={16} /> Save changes
+        <Button type="submit" disabled={!canEdit || saving || !dirty}>
+          <Save size={16} /> {saving ? 'Saving…' : 'Save changes'}
         </Button>
       </div>
+      </form>
     </Card>
   );
 }

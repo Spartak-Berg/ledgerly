@@ -35,6 +35,9 @@ describe('Ledgerly API (e2e)', () => {
   let csrfToken = '';
   let createdCustomerId: string | undefined;
   let createdUserId: string | undefined;
+  let primaryCompanyId = '';
+  let accountantCompanyId = '';
+  let outsiderCompanyId = '';
   const email = `ledgerly-e2e-${Date.now()}@example.test`;
   const password = 'e2e-password-that-is-long';
 
@@ -78,6 +81,7 @@ describe('Ledgerly API (e2e)', () => {
       .expect(201);
     const body = response.body as unknown as AuthResponse;
     createdUserId = body.user.id;
+    primaryCompanyId = body.company.id;
     csrfToken = csrfFrom(response);
     expect(body).toMatchObject({
       user: { email, fullName: 'Ledgerly Test Owner' },
@@ -92,6 +96,95 @@ describe('Ledgerly API (e2e)', () => {
       },
     });
     expect(persisted?.memberships[0]?.company.settings).not.toBeNull();
+
+    const accountantCompany = await prisma.company.create({
+      data: {
+        name: 'Ledgerly Accountant Company',
+        slug: `ledgerly-accountant-${Date.now()}`,
+        settings: { create: {} },
+        memberships: {
+          create: { role: 'ACCOUNTANT', userId: createdUserId },
+        },
+      },
+    });
+    accountantCompanyId = accountantCompany.id;
+    const outsiderCompany = await prisma.company.create({
+      data: {
+        name: 'Ledgerly Unrelated Company',
+        slug: `ledgerly-unrelated-${Date.now()}`,
+        settings: { create: {} },
+      },
+    });
+    outsiderCompanyId = outsiderCompany.id;
+  });
+
+  it('lists memberships, persists company selection and updates owner settings', async () => {
+    await agent
+      .get('/api/v1/companies')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toHaveLength(2);
+      });
+
+    await agent
+      .patch(`/api/v1/companies/${primaryCompanyId}`)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        city: 'Oslo',
+        defaultCurrency: 'NOK',
+        defaultPaymentDays: 21,
+        vatRegistered: true,
+      })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          city: 'Oslo',
+          settings: { defaultPaymentDays: 21 },
+          vatRegistered: true,
+        });
+      });
+
+    await agent
+      .put('/api/v1/companies/current')
+      .set('x-csrf-token', csrfToken)
+      .send({ companyId: accountantCompanyId })
+      .expect(200)
+      .expect((response) => {
+        expect((response.body as unknown as AuthResponse).company.id).toBe(
+          accountantCompanyId,
+        );
+      });
+    await agent
+      .get('/api/v1/auth/me')
+      .expect(200)
+      .expect((response) => {
+        expect((response.body as unknown as AuthResponse).company.id).toBe(
+          accountantCompanyId,
+        );
+      });
+    await agent
+      .put('/api/v1/companies/current')
+      .set('x-csrf-token', csrfToken)
+      .send({ companyId: primaryCompanyId })
+      .expect(200);
+  });
+
+  it('enforces company membership and the centralized role policy', async () => {
+    await agent
+      .get('/api/v1/customers')
+      .set('x-company-id', outsiderCompanyId)
+      .expect(403);
+    await agent
+      .post('/api/v1/customers')
+      .set('x-company-id', accountantCompanyId)
+      .set('x-csrf-token', csrfToken)
+      .send({ companyName: 'Accountant cannot create this' })
+      .expect(403);
+    await agent
+      .patch(`/api/v1/companies/${accountantCompanyId}`)
+      .set('x-csrf-token', csrfToken)
+      .send({ city: 'Bergen' })
+      .expect(403);
   });
 
   it('returns the current authenticated profile', async () => {
@@ -107,6 +200,7 @@ describe('Ledgerly API (e2e)', () => {
   it('requires CSRF for authenticated mutations', async () => {
     await agent
       .post('/api/v1/customers')
+      .set('x-company-id', primaryCompanyId)
       .send({ companyName: 'Blocked without CSRF' })
       .expect(403);
   });
@@ -114,6 +208,7 @@ describe('Ledgerly API (e2e)', () => {
   it('allows authenticated customer CRUD with CSRF', async () => {
     const created = await agent
       .post('/api/v1/customers')
+      .set('x-company-id', primaryCompanyId)
       .set('x-csrf-token', csrfToken)
       .send({
         companyName: 'Ledgerly API Test Customer',
@@ -129,9 +224,17 @@ describe('Ledgerly API (e2e)', () => {
       status: 'ACTIVE',
     });
 
-    await agent.get(`/api/v1/customers/${createdCustomerId}`).expect(200);
+    await agent
+      .get(`/api/v1/customers/${createdCustomerId}`)
+      .set('x-company-id', primaryCompanyId)
+      .expect(200);
+    await agent
+      .get(`/api/v1/customers/${createdCustomerId}`)
+      .set('x-company-id', accountantCompanyId)
+      .expect(404);
     await agent
       .patch(`/api/v1/customers/${createdCustomerId}`)
+      .set('x-company-id', primaryCompanyId)
       .set('x-csrf-token', csrfToken)
       .send({ status: 'ARCHIVED' })
       .expect(200)
@@ -142,6 +245,7 @@ describe('Ledgerly API (e2e)', () => {
       });
     await agent
       .delete(`/api/v1/customers/${createdCustomerId}`)
+      .set('x-company-id', primaryCompanyId)
       .set('x-csrf-token', csrfToken)
       .expect(204);
     createdCustomerId = undefined;
@@ -179,6 +283,14 @@ describe('Ledgerly API (e2e)', () => {
     }
     if (createdUserId) {
       await prisma.user.deleteMany({ where: { id: createdUserId } });
+    }
+    const companyIds = [
+      primaryCompanyId,
+      accountantCompanyId,
+      outsiderCompanyId,
+    ].filter(Boolean);
+    if (companyIds.length) {
+      await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
     }
     await app.close();
   });

@@ -7,18 +7,21 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: CreateCustomerDto) {
-    return this.prisma.customer.create({ data });
+  create(companyId: string, data: CreateCustomerDto) {
+    return this.prisma.customer.create({ data: { ...data, companyId } });
   }
 
-  findAll() {
+  findAll(companyId: string) {
     return this.prisma.customer.findMany({
+      where: { companyId },
       orderBy: { companyName: 'asc' },
     });
   }
 
-  async findOne(id: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id } });
+  async findOne(companyId: string, id: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { companyId, id },
+    });
 
     if (!customer) {
       throw new NotFoundException(`Customer ${id} was not found`);
@@ -27,13 +30,13 @@ export class CustomersService {
     return customer;
   }
 
-  async update(id: string, data: UpdateCustomerDto) {
-    await this.findOne(id);
-    return this.prisma.customer.update({ where: { id }, data });
+  async update(companyId: string, id: string, data: UpdateCustomerDto) {
+    await this.findOne(companyId, id);
+    return this.prisma.customer.update({ where: { companyId, id }, data });
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
-    await this.prisma.customer.delete({ where: { id } });
+  async remove(companyId: string, id: string): Promise<void> {
+    await this.findOne(companyId, id);
+    await this.prisma.customer.delete({ where: { companyId, id } });
   }
 }

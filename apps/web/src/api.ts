@@ -2,6 +2,11 @@ import type { Customer, CustomerStatus } from './lib';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 const CSRF_COOKIE = 'ledgerly_csrf';
+let currentCompanyId: string | undefined;
+
+export const setApiCompanyId = (companyId?: string) => {
+  currentCompanyId = companyId;
+};
 
 type ApiCustomerStatus = 'ACTIVE' | 'LEAD' | 'ARCHIVED';
 
@@ -65,6 +70,7 @@ async function rawRequest<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { 'x-csrf-token': token } : {}),
+      ...(currentCompanyId ? { 'x-company-id': currentCompanyId } : {}),
       ...init?.headers,
     },
   });

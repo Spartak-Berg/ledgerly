@@ -58,6 +58,10 @@ export class AuthService {
             userId: createdUser.id,
           },
         });
+        await transaction.user.update({
+          where: { id: createdUser.id },
+          data: { selectedCompanyId: company.id },
+        });
         return createdUser;
       });
       return this.authenticate(user.id, metadata);
@@ -97,9 +101,9 @@ export class AuthService {
         id: true,
         email: true,
         fullName: true,
+        selectedCompanyId: true,
         memberships: {
           orderBy: { createdAt: 'asc' },
-          take: 1,
           select: {
             role: true,
             company: {
@@ -112,7 +116,10 @@ export class AuthService {
     if (!user || !user.memberships[0]) {
       throw new UnauthorizedException('Account has no available company');
     }
-    const membership = user.memberships[0];
+    const membership =
+      user.memberships.find(
+        ({ company }) => company.id === user.selectedCompanyId,
+      ) ?? user.memberships[0];
     return {
       user: { id: user.id, email: user.email, fullName: user.fullName },
       company: { ...membership.company, role: membership.role },

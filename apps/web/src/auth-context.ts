@@ -26,6 +26,8 @@ export interface AuthValue {
   login(input: LoginInput): Promise<void>;
   logout(): Promise<void>;
   register(input: RegisterInput): Promise<void>;
+  refreshProfile(): Promise<void>;
+  switchCompany(companyId: string): Promise<void>;
 }
 
 export const AuthContext = createContext<AuthValue | null>(null);

@@ -48,6 +48,8 @@ npm run db:migrate
 npm run db:seed
 ```
 
+The optional seed creates the local-only account `demo@ledgerly.local` with password `ledgerly-demo-password`, one fictional company and fictional customers. Never use those credentials outside local development.
+
 Run the API and web app in separate terminals:
 
 ```bash
@@ -89,6 +91,8 @@ npm run test:e2e --prefix apps/api
 ## Database lifecycle
 
 Prisma migrations live in `apps/api/prisma/migrations`. Review generated SQL before committing it. The seed script is additive and safe to rerun; it never deletes existing records.
+
+Every business API request includes `X-Company-Id`. The API verifies that the authenticated user is a member before applying the centralized role policy and company-scoped query. Owners and admins can currently manage company/customer data, accountants can view customers, and employees receive no customer access. Additional domain permissions are introduced with their respective features.
 
 To stop local services without deleting their data:
 

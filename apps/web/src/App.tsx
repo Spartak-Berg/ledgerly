@@ -28,7 +28,7 @@ function ProtectedRoutes() {
   const location = useLocation()
   if (loading) return <LoadingSkeleton />
   if (!profile) return <Navigate to="/login" replace state={{ from: location.pathname }} />
-  return <AppShell><Suspense fallback={<LoadingSkeleton />}><Routes>
+  return <AppShell key={profile.company.id}><Suspense fallback={<LoadingSkeleton />}><Routes>
     <Route path="/" element={<Dashboard />} />
     <Route path="/customers" element={<Customers />} />
     <Route path="/customers/:id" element={<CustomerDetail />} />
