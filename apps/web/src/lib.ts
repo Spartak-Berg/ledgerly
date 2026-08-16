@@ -6,9 +6,10 @@ export const shortDate = (value: string) =>
 
 export type InvoiceStatus = 'Draft' | 'Sent' | 'Paid' | 'Overdue'
 export type CustomerStatus = 'Active' | 'Lead' | 'Archived'
+export type CustomerType = 'Company' | 'Individual'
 export type ExpenseStatus = 'Approved' | 'Pending' | 'Rejected'
 
-export interface Customer { id: string; company: string; contact: string; email: string; phone: string; outstanding: number; status: CustomerStatus }
+export interface Customer { id: string; company: string; type: CustomerType; organisationNumber: string; contact: string; email: string; phone: string; billingAddressLine1: string; billingAddressLine2: string; billingPostalCode: string; billingCity: string; postalAddressLine1: string; postalAddressLine2: string; postalPostalCode: string; postalCity: string; countryCode: string; vatNumber: string; defaultCurrency: string; defaultPaymentDays: number; notes: string; outstanding: number; status: CustomerStatus }
 export interface Invoice { id: string; number: string; customer: string; issueDate: string; dueDate: string; status: InvoiceStatus; amount: number }
 export interface Expense { id: string; merchant: string; category: string; date: string; amount: number; vat: number; status: ExpenseStatus; color: string }
 

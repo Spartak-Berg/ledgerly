@@ -97,16 +97,32 @@ model Session {
 }
 
 model Customer {
-  id          String         @id @default(uuid()) @db.Uuid
-  companyId   String?        @db.Uuid
-  companyName String
-  contactName String?
-  email       String?
-  phone       String?
-  status      CustomerStatus @default(ACTIVE)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  company     Company?       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  id                  String         @id @default(uuid()) @db.Uuid
+  companyId           String         @db.Uuid
+  companyName         String
+  type                CustomerType   @default(COMPANY)
+  organisationNumber  String?
+  contactName         String?
+  email               String?
+  phone               String?
+  billingAddressLine1 String?
+  billingAddressLine2 String?
+  billingPostalCode   String?
+  billingCity         String?
+  postalAddressLine1  String?
+  postalAddressLine2  String?
+  postalPostalCode    String?
+  postalCity          String?
+  countryCode         String         @default("NO") @db.VarChar(2)
+  vatNumber           String?
+  defaultCurrency     String         @default("NOK") @db.VarChar(3)
+  defaultPaymentDays  Int            @default(14)
+  notes               String?
+  status              CustomerStatus @default(ACTIVE)
+  archivedAt          DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  company             Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([companyId, companyName])
   @@index([companyName])
@@ -117,6 +133,11 @@ enum CustomerStatus {
   ACTIVE
   LEAD
   ARCHIVED
+}
+
+enum CustomerType {
+  COMPANY
+  INDIVIDUAL
 }
 
 enum CompanyRole {

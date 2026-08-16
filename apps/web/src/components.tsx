@@ -203,3 +203,7 @@ export function MetricCard({
     </Card>
   );
 }
+
+export function ConfirmDialog({ title, description, confirmLabel, onCancel, onConfirm, busy = false }: { title: string; description: string; confirmLabel: string; onCancel: () => void; onConfirm: () => void; busy?: boolean }) {
+  return <div className="modal-backdrop"><section className="modal-card confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title"><div className="modal-head"><div><h2 id="confirm-title">{title}</h2><p>{description}</p></div></div><div className="modal-actions"><Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button><Button variant="danger" onClick={onConfirm} disabled={busy}>{busy ? 'Working…' : confirmLabel}</Button></div></section></div>
+}

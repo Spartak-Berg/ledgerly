@@ -248,7 +248,6 @@ describe('Ledgerly API (e2e)', () => {
       .set('x-company-id', primaryCompanyId)
       .set('x-csrf-token', csrfToken)
       .expect(204);
-    createdCustomerId = undefined;
   });
 
   it('rotates refresh credentials and revokes the session on logout', async () => {

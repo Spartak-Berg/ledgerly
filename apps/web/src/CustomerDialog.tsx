@@ -1,14 +1,18 @@
 import { useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import type { CustomerInput } from './api';
-import { Button, Field, Input, Select } from './components';
+import { Button, Field, Input, Select, Textarea } from './components';
 import type { Customer } from './lib';
 
 const initialInput: CustomerInput = {
   companyName: '',
+  type: 'COMPANY', organisationNumber: '',
   contactName: '',
   email: '',
   phone: '',
+  billingAddressLine1: '', billingAddressLine2: '', billingPostalCode: '', billingCity: '',
+  postalAddressLine1: '', postalAddressLine2: '', postalPostalCode: '', postalCity: '',
+  countryCode: 'NO', vatNumber: '', defaultCurrency: 'NOK', defaultPaymentDays: 14, notes: '',
   status: 'ACTIVE',
 };
 
@@ -16,9 +20,13 @@ const fromCustomer = (customer?: Customer): CustomerInput =>
   customer
     ? {
         companyName: customer.company,
+        type: customer.type.toUpperCase() as CustomerInput['type'], organisationNumber: customer.organisationNumber,
         contactName: customer.contact,
         email: customer.email,
         phone: customer.phone,
+        billingAddressLine1: customer.billingAddressLine1, billingAddressLine2: customer.billingAddressLine2, billingPostalCode: customer.billingPostalCode, billingCity: customer.billingCity,
+        postalAddressLine1: customer.postalAddressLine1, postalAddressLine2: customer.postalAddressLine2, postalPostalCode: customer.postalPostalCode, postalCity: customer.postalCity,
+        countryCode: customer.countryCode, vatNumber: customer.vatNumber, defaultCurrency: customer.defaultCurrency, defaultPaymentDays: customer.defaultPaymentDays, notes: customer.notes,
         status: customer.status.toUpperCase() as CustomerInput['status'],
       }
     : initialInput;
@@ -71,6 +79,7 @@ export function CustomerDialog({
         </div>
         <form onSubmit={submit}>
           <div className="form-grid">
+            <Field label="Customer type"><Select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as CustomerInput['type'] })}><option value="COMPANY">Company</option><option value="INDIVIDUAL">Individual</option></Select></Field>
             <Field label="Company name">
               <Input
                 value={form.companyName}
@@ -80,6 +89,7 @@ export function CustomerDialog({
                 autoFocus
               />
             </Field>
+            <Field label="Organisation number"><Input value={form.organisationNumber} onChange={(event) => setForm({ ...form, organisationNumber: event.target.value })} /></Field>
             <Field label="Contact person">
               <Input
                 value={form.contactName}
@@ -114,7 +124,16 @@ export function CustomerDialog({
                 <option value="ARCHIVED">Archived</option>
               </Select>
             </Field>
+            <Field label="Billing address"><Input value={form.billingAddressLine1} onChange={(event) => setForm({ ...form, billingAddressLine1: event.target.value })} /></Field>
+            <Field label="Billing address line 2"><Input value={form.billingAddressLine2} onChange={(event) => setForm({ ...form, billingAddressLine2: event.target.value })} /></Field>
+            <Field label="Postal code"><Input value={form.billingPostalCode} onChange={(event) => setForm({ ...form, billingPostalCode: event.target.value })} /></Field>
+            <Field label="City"><Input value={form.billingCity} onChange={(event) => setForm({ ...form, billingCity: event.target.value })} /></Field>
+            <Field label="Country"><Select value={form.countryCode} onChange={(event) => setForm({ ...form, countryCode: event.target.value })}><option value="NO">Norway</option><option value="SE">Sweden</option><option value="DK">Denmark</option></Select></Field>
+            <Field label="VAT number"><Input value={form.vatNumber} onChange={(event) => setForm({ ...form, vatNumber: event.target.value })} /></Field>
+            <Field label="Currency"><Select value={form.defaultCurrency} onChange={(event) => setForm({ ...form, defaultCurrency: event.target.value })}><option>NOK</option><option>SEK</option><option>DKK</option><option>EUR</option><option>USD</option></Select></Field>
+            <Field label="Payment terms (days)"><Input type="number" min={1} max={365} value={form.defaultPaymentDays} onChange={(event) => setForm({ ...form, defaultPaymentDays: Number(event.target.value) })} /></Field>
           </div>
+          <Field label="Notes"><Textarea rows={3} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} maxLength={5000} /></Field>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>

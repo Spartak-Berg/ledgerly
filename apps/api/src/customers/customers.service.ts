@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerQueryDto } from './dto/customer-query.dto';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
@@ -11,11 +13,40 @@ export class CustomersService {
     return this.prisma.customer.create({ data: { ...data, companyId } });
   }
 
-  findAll(companyId: string) {
-    return this.prisma.customer.findMany({
-      where: { companyId },
-      orderBy: { companyName: 'asc' },
-    });
+  async findAll(companyId: string, query: CustomerQueryDto) {
+    const where: Prisma.CustomerWhereInput = {
+      companyId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              'companyName',
+              'contactName',
+              'email',
+              'organisationNumber',
+            ].map((field) => ({
+              [field]: { contains: query.search, mode: 'insensitive' },
+            })),
+          }
+        : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { [query.sortBy]: query.sortDirection },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      this.prisma.customer.count({ where }),
+    ]);
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.ceil(total / query.pageSize),
+    };
   }
 
   async findOne(companyId: string, id: string) {
@@ -37,6 +68,9 @@ export class CustomersService {
 
   async remove(companyId: string, id: string): Promise<void> {
     await this.findOne(companyId, id);
-    await this.prisma.customer.delete({ where: { companyId, id } });
+    await this.prisma.customer.update({
+      where: { companyId, id },
+      data: { archivedAt: new Date(), status: 'ARCHIVED' },
+    });
   }
 }

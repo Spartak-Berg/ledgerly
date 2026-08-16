@@ -16,6 +16,7 @@ import { Download, Filter, Pencil, Plus, Receipt, Trash2, UserPlus } from 'lucid
 import {
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   LoadingSkeleton,
   MenuButton,
@@ -307,36 +308,40 @@ function InvoiceTable({ compact = false }: { compact?: boolean }) {
 }
 
 export function Customers() {
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('All');
+  const { profile } = useAuth();
+  const canManage = profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
   const [list, setList] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Customer | null>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [pendingArchive, setPendingArchive] = useState<Customer>();
+  const [archiving, setArchiving] = useState(false);
+  const query = searchParams.get('q') ?? '';
+  const status = searchParams.get('status') ?? 'All';
   const showDialog = editing !== undefined || searchParams.get('new') === '1';
 
   useEffect(() => {
     let active = true;
-    customerApi
-      .list()
-      .then((result) => active && setList(result))
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (query) params.set('search', query);
+      if (status !== 'All') params.set('status', status.toUpperCase());
+      customerApi
+      .search(params)
+      .then((result) => active && setList(result.items))
       .catch((reason: unknown) =>
         active && setError(reason instanceof Error ? reason.message : 'Could not load customers'),
       )
       .finally(() => active && setLoading(false));
+    }, 250);
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, []);
+  }, [query, status]);
 
-  const filtered = list.filter(
-    (x) =>
-      (status === 'All' || x.status === status) &&
-      `${x.company} ${x.contact} ${x.email}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
+  const filtered = list;
 
   const closeDialog = () => {
     setEditing(undefined);
@@ -359,13 +364,13 @@ export function Customers() {
   };
 
   const removeCustomer = async (customer: Customer) => {
-    if (!window.confirm(`Delete ${customer.company}? This cannot be undone.`)) return;
+    setArchiving(true);
     try {
       await customerApi.remove(customer.id);
-      setList((current) => current.filter((item) => item.id !== customer.id));
+      setList((current) => current.filter((item) => item.id !== customer.id)); setPendingArchive(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not delete customer');
-    }
+      setError(reason instanceof Error ? reason.message : 'Could not archive customer');
+    } finally { setArchiving(false); }
   };
 
   return (
@@ -374,22 +379,22 @@ export function Customers() {
         title="Customers"
         description="Manage customer details and billing contacts."
         action={
-          <Button onClick={() => setEditing(null)}>
+          canManage ? <Button onClick={() => setEditing(null)}>
             <Plus size={16} /> Add customer
-          </Button>
+          </Button> : undefined
         }
       />
       <Card>
         <div className="filterbar">
           <SearchInput
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { const next = new URLSearchParams(searchParams); if (e.target.value) next.set('q', e.target.value); else next.delete('q'); setSearchParams(next, { replace: true }); }}
             placeholder="Search customers…"
           />
           <div>
             <Select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(e) => { const next = new URLSearchParams(searchParams); if (e.target.value === 'All') next.delete('status'); else next.set('status', e.target.value); setSearchParams(next, { replace: true }); }}
             >
               <option>All</option>
               <option>Active</option>
@@ -433,14 +438,14 @@ export function Customers() {
                       <StatusBadge>{x.status}</StatusBadge>
                     </td>
                     <td>
-                      <div className="row-actions">
+                      {canManage && <div className="row-actions">
                         <Button variant="ghost" aria-label={`Edit ${x.company}`} onClick={() => setEditing(x)}>
                           <Pencil size={15} />
                         </Button>
-                        <Button variant="ghost" aria-label={`Delete ${x.company}`} onClick={() => void removeCustomer(x)}>
+                        <Button variant="ghost" aria-label={`Archive ${x.company}`} onClick={() => setPendingArchive(x)}>
                           <Trash2 size={15} />
                         </Button>
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))}
@@ -473,8 +478,7 @@ export function Customers() {
               </dl>
               <div className="mobile-record-actions">
                 <Link className="button button-secondary" to={`/customers/${x.id}`}>View</Link>
-                <Button variant="secondary" onClick={() => setEditing(x)}>Edit</Button>
-                <Button variant="ghost" onClick={() => void removeCustomer(x)}>Delete</Button>
+                {canManage && <><Button variant="secondary" onClick={() => setEditing(x)}>Edit</Button><Button variant="ghost" onClick={() => setPendingArchive(x)}>Archive</Button></>}
               </div>
             </div>
           ))}
@@ -495,11 +499,14 @@ export function Customers() {
           onSave={saveCustomer}
         />
       )}
+      {pendingArchive && <ConfirmDialog title={`Archive ${pendingArchive.company}?`} description="The customer will be hidden from active workflows while its history remains preserved." confirmLabel="Archive customer" busy={archiving} onCancel={() => setPendingArchive(undefined)} onConfirm={() => void removeCustomer(pendingArchive)} />}
     </div>
   );
 }
 
 export function CustomerDetail() {
+  const { profile } = useAuth();
+  const canManage = profile?.company.role === 'OWNER' || profile?.company.role === 'ADMIN';
   const { id } = useParams();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer>();
@@ -507,6 +514,7 @@ export function CustomerDetail() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState('Overview');
+  const [confirmArchive, setConfirmArchive] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -539,12 +547,11 @@ export function CustomerDetail() {
   };
 
   const removeCustomer = async () => {
-    if (!window.confirm(`Delete ${customer.company}? This cannot be undone.`)) return;
     try {
       await customerApi.remove(customer.id);
       navigate('/customers');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not delete customer');
+      setError(reason instanceof Error ? reason.message : 'Could not archive customer');
     }
   };
 
@@ -562,10 +569,7 @@ export function CustomerDetail() {
           </div>
         </div>
         <div className="button-row">
-          <Button variant="secondary" onClick={() => setEditing(true)}>Edit customer</Button>
-          <Button variant="ghost" onClick={() => void removeCustomer()}>
-            <Trash2 size={16} /> Delete
-          </Button>
+          {canManage && <><Button variant="secondary" onClick={() => setEditing(true)}>Edit customer</Button><Button variant="ghost" onClick={() => setConfirmArchive(true)}><Trash2 size={16} /> Archive</Button></>}
           <Link
             className="button button-primary"
             to={`/invoices/new?customer=${customer.id}`}
@@ -610,6 +614,10 @@ export function CustomerDetail() {
                 <dt>Phone</dt>
                 <dd>{customer.phone || 'Not provided'}</dd>
               </div>
+              <div><dt>Organisation number</dt><dd>{customer.organisationNumber || 'Not provided'}</dd></div>
+              <div><dt>Billing address</dt><dd>{[customer.billingAddressLine1, customer.billingPostalCode, customer.billingCity, customer.countryCode].filter(Boolean).join(', ') || 'Not provided'}</dd></div>
+              <div><dt>VAT number</dt><dd>{customer.vatNumber || 'Not provided'}</dd></div>
+              <div><dt>Payment terms</dt><dd>{customer.defaultPaymentDays} days · {customer.defaultCurrency}</dd></div>
             </dl>
           </Card>
           <div>
@@ -651,6 +659,7 @@ export function CustomerDetail() {
       {editing && (
         <CustomerDialog customer={customer} onClose={() => setEditing(false)} onSave={updateCustomer} />
       )}
+      {confirmArchive && <ConfirmDialog title={`Archive ${customer.company}?`} description="The customer history will remain preserved." confirmLabel="Archive customer" onCancel={() => setConfirmArchive(false)} onConfirm={() => void removeCustomer()} />}
     </div>
   );
 }

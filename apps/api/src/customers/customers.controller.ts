@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Req,
+  Query,
 } from '@nestjs/common';
 import { RequirePermission } from '../auth/auth.decorators';
 import { CompanyPermission } from '../auth/permissions';
@@ -17,6 +18,7 @@ import type { CompanyRequest } from '../auth/auth.types';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerQueryDto } from './dto/customer-query.dto';
 
 @Controller('customers')
 export class CustomersController {
@@ -30,8 +32,8 @@ export class CustomersController {
 
   @Get()
   @RequirePermission(CompanyPermission.VIEW_CUSTOMERS)
-  findAll(@Req() request: CompanyRequest) {
-    return this.customersService.findAll(request.auth.companyId);
+  findAll(@Req() request: CompanyRequest, @Query() query: CustomerQueryDto) {
+    return this.customersService.findAll(request.auth.companyId, query);
   }
 
   @Get(':id')
